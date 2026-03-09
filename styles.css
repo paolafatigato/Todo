@@ -856,3 +856,219 @@ body {
 #auth-overlay h2 { margin-bottom: 8px; color: var(--blue); font-family: var(--font-display); }
 #auth-overlay p { margin-bottom: 18px; color: var(--text-muted); }
 #auth-overlay button { padding: 10px 18px; background: var(--blue); color: #fff; border-radius: var(--radius); font-weight: 600; }
+
+/* ============================================================
+   TASK META — period pill + deadline chip
+   (Appended for the planning feature)
+   ============================================================ */
+
+/* Task body wraps name + meta chips stacked vertically */
+.task-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.task-name {
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Row of small chips below the task name */
+.task-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+/* Period pill — color set inline from PERIODS config */
+.task-period-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* The "!" exclamation shown inside an overdue period pill */
+.period-bang {
+  font-weight: 800;
+  font-size: 0.8em;
+  margin-right: 1px;
+}
+
+/* Deadline chip */
+.task-deadline-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: #f0f4ff;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Overdue deadline chip */
+.task-deadline-chip.past {
+  background: #fff0f2;
+  color: var(--red);
+  border-color: #ffccd4;
+}
+
+/* ============================================================
+   OVERDUE TASK HIGHLIGHT
+   ============================================================ */
+
+/* Tasks that were auto-advanced get an amber left border + subtle bg */
+.task-item.overdue {
+  border-left: 3px solid #e07a00;
+  background: linear-gradient(90deg, #fff8ee 0%, var(--surface) 60px);
+}
+
+.task-item.overdue:hover {
+  background: linear-gradient(90deg, #fff2d8 0%, #fafcff 60px);
+}
+
+/* ============================================================
+   DETAIL PANEL — planning section
+   ============================================================ */
+
+/* Section wrapper inside detail panel */
+.detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.detail-section-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Planning section gets a subtle background card */
+.planning-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  gap: 14px;
+}
+
+/* Each field inside the planning section */
+.planning-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.planning-field label,
+.detail-section label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Period select */
+#detail-period {
+  width: 100%;
+  padding: 9px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t);
+  appearance: auto;
+}
+
+#detail-period:focus {
+  border-color: var(--blue);
+}
+
+/* Deadline row: date input + clear button side by side */
+.deadline-input-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#detail-deadline {
+  flex: 1;
+  padding: 9px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--t);
+}
+
+#detail-deadline:focus {
+  border-color: var(--blue);
+}
+
+#btn-clear-deadline {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--t), color var(--t);
+  border: 1px solid var(--border);
+}
+
+#btn-clear-deadline:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+/* Deadline status text */
+.deadline-status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  min-height: 1em;
+}
+
+.deadline-status.ok   { color: #1a8060; }
+.deadline-status.past { color: var(--red); font-weight: 600; }
+
+/* ============================================================
+   OVERDUE WARNING BAR in detail panel
+   ============================================================ */
+#detail-overdue-bar {
+  background: #fff3e0;
+  border: 1px solid #e07a00;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #7a3c00;
+  line-height: 1.5;
+}
