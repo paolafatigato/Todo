@@ -18,29 +18,17 @@
   --petal-pink: #DB5ABA;
 
   --c1:  #FFF088;  /* yellow */
-
-  --c2:  #D9F0B0;  /* yellow → green bridge */
-
+  --c2:  #5C946E;  /*  green bridge */
   --c3:  #A1BEF8;  /* light blue */
-
   --c4:  #6F8FE3;  /* blue bridge */
-
   --c5:  #3548C0;  /* blue */
-
   --c6:  #7C6ED8;  /* blue → lilac */
-
   --c7:  #B285EC;  /* lilac */
-
   --c8:  #C873D4;  /* lilac → pink */
-
   --c9:  #DB5ABA;  /* petal pink */
-
   --c10: #E96FAF;  /* bridge */
-
   --c11: #FF98A9;  /* pink */
-
   --c12: #F36B7E;  /* pink → red */
-
   --c15: #FF0022;  /* red */
 
   /* Semantic aliases */
@@ -2036,4 +2024,45 @@ body {
     background: var(--border);
     color: var(--text-primary);
   }
+}
+/* ============================================================
+   COMPLETED TASKS — divider + faded appearance
+   ============================================================ */
+
+/* The task.completed style already exists; strengthen it so items look clearly done */
+.task-item.completed {
+  opacity: 0.45;
+  pointer-events: auto; /* still clickable to un-complete */
+}
+.task-item.completed:hover { opacity: 0.65; }
+
+/* Completed tasks: no drag handle needed — remove it visually */
+.task-item.completed .task-drag-handle { display: none; }
+
+/* Section divider between active and completed tasks */
+.task-completed-divider {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 4px 6px;
+  cursor: default;
+  user-select: none;
+}
+
+.task-completed-divider::before,
+.task-completed-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.task-completed-divider-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
 }

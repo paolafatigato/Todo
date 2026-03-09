@@ -786,24 +786,32 @@ function renderTaskList() {
     return;
   }
 
-  state.tasks.forEach(task => {
-    const period       = task.plannedPeriod ? getPeriod(task.plannedPeriod) : null;
+  // Split: incomplete tasks keep their manual order; completed sink to the bottom
+  const incomplete = state.tasks.filter(t => !t.completed);
+  const completed  = state.tasks.filter(t =>  t.completed);
+
+  /** Render a single task <li> and append it to the list */
+  function appendTaskRow(task, isDone) {
+    const period       = (!isDone && task.plannedPeriod) ? getPeriod(task.plannedPeriod) : null;
     const deadlinePast = isDeadlinePast(task.deadline);
 
     const li = document.createElement('li');
-    li.className = ['task-item', task.completed ? 'completed' : '', task.overdue ? 'overdue' : '']
-      .filter(Boolean).join(' ');
-    li.dataset.id = task.id;
-    li.draggable = true;
+    li.className = [
+      'task-item',
+      isDone          ? 'completed' : '',
+      task.overdue    ? 'overdue'   : '',
+    ].filter(Boolean).join(' ');
+    li.dataset.id  = task.id;
+    li.draggable   = !isDone; // completed tasks are not draggable
 
     li.innerHTML = `
-      <span class="task-drag-handle">⠿</span>
-      <span class="task-check ${task.completed ? 'checked' : ''}" data-action="check"></span>
+      ${isDone ? '' : '<span class="task-drag-handle">⠿</span>'}
+      <span class="task-check ${isDone ? 'checked' : ''}" data-action="check"></span>
       <div class="task-body">
         <span class="task-name">${escapeHtml(task.name)}</span>
-        ${buildTaskMetaHtml(task, period, deadlinePast)}
+        ${buildTaskMetaHtml(task, period, deadlinePast, isDone)}
       </div>
-      ${task.notes ? '<span class="task-has-notes" title="Ha note"></span>' : ''}
+      ${task.notes && !isDone ? '<span class="task-has-notes" title="Ha note"></span>' : ''}
     `;
 
     li.querySelector('[data-action="check"]').addEventListener('click', e => {
@@ -812,20 +820,37 @@ function renderTaskList() {
     });
     li.addEventListener('click', () => openDetailPanel(task.id));
     el.taskList.appendChild(li);
-  });
+  }
 
+  // 1. Render incomplete tasks (draggable, with period pills)
+  incomplete.forEach(task => appendTaskRow(task, false));
+
+  // 2. If there are completed tasks, add a divider then render them
+  if (completed.length > 0) {
+    const divider = document.createElement('li');
+    divider.className = 'task-completed-divider';
+    divider.innerHTML = `
+      <span class="task-completed-divider-label">Completati (${completed.length})</span>
+    `;
+    el.taskList.appendChild(divider);
+
+    completed.forEach(task => appendTaskRow(task, true));
+  }
+
+  // Only the incomplete tasks participate in drag-and-drop ordering
   bindTaskDragDrop();
 }
 
-function buildTaskMetaHtml(task, period, deadlinePast) {
+// isDone=true → hide period pill (task is already done, period no longer relevant)
+function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
   const parts = [];
-  if (period) {
+  if (period && !isDone) {
     const bang = task.overdue ? '<span class="period-bang">!</span>' : '';
     parts.push(`<span class="task-period-pill"
       style="background:${period.color}18;color:${period.color};border-color:${period.color}50"
     >${bang}${period.label}</span>`);
   }
-  if (task.deadline) {
+  if (task.deadline && !isDone) {
     parts.push(`<span class="task-deadline-chip ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>`);
   }
   return parts.length > 0 ? `<div class="task-meta">${parts.join('')}</div>` : '';
