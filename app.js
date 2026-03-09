@@ -30,16 +30,16 @@ function cssVar(name, fallback) {
   }
 }
 const PERIODS = [
-  { key: 'oggi',                     label: 'Oggi',                      color: cssVar('--c15', '#C03D55'), getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
-  { key: 'domani',                   label: 'Domani',                    color: cssVar('--c12', '#d45a10'), getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
-  { key: 'questa_settimana',         label: 'Questa settimana',          color: cssVar('--c11', '#b07800'), getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
-  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: cssVar('--c4', '#7a6e00'), getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
-  { key: 'questo_mese',              label: 'Questo mese',               color: cssVar('--c6', '#3548C0'), getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
-  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: cssVar('--c5', '#2a6bba'), getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
-  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: cssVar('--c4', '#1a8060'), getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
-  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: cssVar('--c3', '#6040b0'), getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
-  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: cssVar('--c2', '#7a83b8'), getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
-  { key: 'prossima_vita',            label: 'Prossima vita',             color: cssVar('--c1', '#aaaaaa'), getEnd: () => null,                                                                      getStart: () => null },
+  { key: 'oggi',                     label: 'Oggi',                      color: cssVar('--c15', '#CE2D4F'), getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
+  { key: 'domani',                   label: 'Domani',                    color: cssVar('--c12', '#F36B7E'), getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
+  { key: 'questa_settimana',         label: 'Questa settimana',          color: cssVar('--c11', '#FF98A9'), getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
+  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: cssVar('--c9', '#DB5ABA'), getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
+  { key: 'questo_mese',              label: 'Questo mese',               color: cssVar('--c6', '#B285EC'), getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
+  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: cssVar('--c5', '#3548C0'), getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
+  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: cssVar('--c4', '#6F8FE3'), getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
+  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: cssVar('--c3', '#A1BEF8'), getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
+  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: cssVar('--c2', '#5C946E'), getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
+  { key: 'prossima_vita',            label: 'Prossima vita',             color: cssVar('--c1', '#FFF088'), getEnd: () => null,                                                                      getStart: () => null },
 ];
 
 const getPeriod     = key => PERIODS.find(p => p.key === key) || null;
