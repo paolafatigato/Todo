@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Todo List — Todo</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ======================================================
+       SIDEBAR — list navigation
+  ====================================================== -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span class="logo">✦ Todo </span>
+      <button id="btn-new-list" title="New list">+</button>
+    </div>
+
+    <!-- Each list item is rendered here by JS -->
+    <ul id="lists-nav" role="list"></ul>
+
+    <div id="sidebar-footer">
+        <button id="btn-home" title="All lists">⊞ All Lists</button>
+        <div class="auth-controls">
+          <button id="btn-login" title="Login with Google">Login</button>
+          <button id="btn-logout" class="hidden" title="Logout">Logout</button>
+        </div>
+    </div>
+  </aside>
+
+  <!-- ======================================================
+       MAIN AREA — homepage or active list view
+  ====================================================== -->
+  <main id="main">
+
+    <!-- Homepage: shown when no starred list or user navigates home -->
+    <section id="homepage" class="hidden">
+      <header id="home-header">
+        <h1>My Lists</h1>
+        <button id="btn-new-list-home">+ New list</button>
+      </header>
+      <!-- List cards rendered here -->
+      <div id="home-cards"></div>
+    </section>
+
+    <!-- List view: shown when a list is open -->
+    <section id="list-view" class="hidden">
+      <header id="list-header">
+        <div id="list-title-row">
+          <input id="list-title-input" type="text" placeholder="List name…" autocomplete="off" />
+          <button id="btn-star" title="Star this list">☆</button>
+          <button id="btn-delete-list" title="Delete list">🗑</button>
+        </div>
+        <div id="add-task-row">
+          <input id="task-input" type="text" placeholder="Add a task and press Enter…" autocomplete="off" />
+          <button id="btn-add-task">Add</button>
+        </div>
+      </header>
+
+      <!-- Task list; items rendered by JS, drag-and-drop enabled -->
+      <ul id="task-list" role="list"></ul>
+    </section>
+
+    <!-- Empty state shown while loading -->
+    <div id="loading">Loading…</div>
+  </main>
+
+  <!-- ======================================================
+       TASK DETAIL PANEL — slides in from the right
+  ====================================================== -->
+  <aside id="detail-panel" class="hidden" role="complementary" aria-label="Task details">
+    <div id="detail-inner">
+      <button id="btn-close-detail">✕</button>
+      <h2 id="detail-task-title"></h2>
+
+      <label for="detail-notes">Notes / Specs</label>
+      <textarea id="detail-notes" placeholder="Add detailed notes, specs, links…"></textarea>
+
+      <div id="detail-actions">
+        <button id="btn-complete-task">Mark complete</button>
+        <button id="btn-delete-task" class="danger">Delete task</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Overlay behind detail panel on mobile -->
+  <div id="overlay" class="hidden"></div>
+
+  <!-- ======================================================
+       MODAL — for creating a new list
+  ====================================================== -->
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal">
+      <h3>New List</h3>
+      <input id="modal-list-name" type="text" placeholder="List name…" autocomplete="off" />
+      <div id="modal-actions">
+        <button id="btn-modal-cancel">Cancel</button>
+        <button id="btn-modal-create">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase App (the core Firebase SDK) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <!-- Configurazione Firebase locale -->
+  <script src="firebase-config.js"></script>
+  <!-- app.js loaded as ES module so it can import firebase-config.js -->
+  <script type="module" src="app.js"></script>
+
+  <!-- AUTH OVERLAY: shown when user is not signed in -->
+  <div id="auth-overlay" class="hidden">
+    <div class="auth-box">
+      <h2>Accedi per usare Todo</h2>
+      <p>Effettua il login con Google per sincronizzare le tue liste.</p>
+      <button id="overlay-login">Accedi con Google</button>
+    </div>
+  </div>
+</body>
+</html>
