@@ -1514,6 +1514,29 @@ body {
   border-color: rgba(192,61,85,0.5);
 }
 
+/* Mobile: hide top logout and style footer logout like the original */
+@media (max-width: 800px) {
+  #btn-logout { display: none !important; }
+
+  #btn-logout-mobile {
+    width: auto;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,152,169,0.12);
+    color: #FF98A9;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    border: 1px solid rgba(255,152,169,0.28);
+  }
+
+  #btn-logout-mobile:hover {
+    background: rgba(192,61,85,0.25);
+    color: #fff;
+    border-color: rgba(192,61,85,0.5);
+  }
+}
+
 
 /* ============================================================
    CALENDAR VIEW — layout
@@ -1871,4 +1894,101 @@ body {
   .cal-day { min-height: 42px; border-radius: 6px; }
   .cal-day-num { font-size: 0.75rem; }
   .cal-dot { width: 5px; height: 5px; }
+}
+
+/* ----------------------------------------------------------
+   MOBILE FOOTER — shown only on small screens
+   ---------------------------------------------------------- */
+#mobile-footer { display: none; }
+
+#mobile-footer .mobile-footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 8px 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+#btn-logout-mobile {
+  padding: 8px 12px;
+  background: transparent;
+  border-radius: 8px;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+@media (max-width: 800px) {
+  /* Show mobile footer and give main content room */
+  #mobile-footer {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    z-index: 60;
+  }
+
+  #main { padding-bottom: 64px; }
+
+  /* Ensure the mobile logout button is aligned to the right */
+  #mobile-footer .mobile-footer-inner { justify-content: flex-end; }
+
+  /* Make footer logout visually identical to desktop logout */
+  #btn-logout-mobile {
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,152,169,0.12);
+    color: #FF98A9;
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-align: center;
+    border: 1px solid rgba(255,152,169,0.28);
+  }
+
+  #btn-logout-mobile:hover {
+    background: rgba(192,61,85,0.25);
+    color: #fff;
+    border-color: rgba(192,61,85,0.5);
+  }
+}
+
+/* Hide the auth-controls row on mobile — login moved to footer */
+@media (max-width: 800px) {
+  .auth-controls { display: none !important; }
+}
+
+/* Style for mobile login button to keep same graphics as sidebar login */
+#btn-login-mobile {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.10);
+  color: rgba(255,255,255,0.85);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: 1px solid rgba(255,255,255,0.20);
+}
+
+#btn-login-mobile:hover {
+  background: rgba(255,240,136,0.18);
+  color: var(--yellow);
+  border-color: rgba(255,240,136,0.4);
+}
+
+/* Make sure mobile login looks reasonable on light footer: adapt colors when footer is light */
+@media (max-width: 800px) {
+  #btn-login-mobile {
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+  #btn-login-mobile:hover {
+    background: var(--border);
+    color: var(--text-primary);
+  }
 }

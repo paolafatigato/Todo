@@ -294,6 +294,8 @@ const el = {
   btnLogin:             document.getElementById('btn-login'),
   btnLogout:            document.getElementById('btn-logout'),
   btnOverlayLogin:      document.getElementById('overlay-login'),
+  btnLogoutMobile:      document.getElementById('btn-logout-mobile'),
+  btnLoginMobile:       document.getElementById('btn-login-mobile'),
   authOverlay:          document.getElementById('auth-overlay'),
   detailDeadline:       document.getElementById('detail-deadline'),
   detailPeriod:         document.getElementById('detail-period'),
@@ -1073,6 +1075,8 @@ function bindEvents() {
 
   if (el.btnLogin)        el.btnLogin.addEventListener('click', loginWithGoogle);
   if (el.btnLogout)       el.btnLogout.addEventListener('click', logoutUser);
+  if (el.btnLogoutMobile) el.btnLogoutMobile.addEventListener('click', logoutUser);
+  if (el.btnLoginMobile)  el.btnLoginMobile.addEventListener('click', loginWithGoogle);
   if (el.btnOverlayLogin) el.btnOverlayLogin.addEventListener('click', loginWithGoogle);
 }
 
@@ -1337,6 +1341,8 @@ function init() {
         currentUserUid = user.uid;
         if (el.btnLogin)    el.btnLogin.classList.add('hidden');
         if (el.btnLogout)   el.btnLogout.classList.remove('hidden');
+        if (el.btnLogoutMobile) el.btnLogoutMobile.classList.remove('hidden');
+        if (el.btnLoginMobile)  el.btnLoginMobile.classList.add('hidden');
         if (el.authOverlay) el.authOverlay.classList.add('hidden');
         try { listenLists(); } catch (err) { console.error('listenLists failed', err); }
       } else {
@@ -1347,6 +1353,8 @@ function init() {
         renderSidebar(); showHomepage();
         if (el.btnLogin)    el.btnLogin.classList.remove('hidden');
         if (el.btnLogout)   el.btnLogout.classList.add('hidden');
+        if (el.btnLogoutMobile) el.btnLogoutMobile.classList.add('hidden');
+        if (el.btnLoginMobile)  el.btnLoginMobile.classList.remove('hidden');
         if (el.authOverlay) el.authOverlay.classList.remove('hidden');
       }
     });
