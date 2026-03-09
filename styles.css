@@ -1072,3 +1072,377 @@ body {
   color: #7a3c00;
   line-height: 1.5;
 }
+
+
+/* ============================================================
+   SIDEBAR — agenda button
+   ============================================================ */
+
+#btn-timeline {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  color: rgba(255,255,255,0.7);
+  font-size: 0.9rem;
+  text-align: left;
+  transition: background var(--t), color var(--t);
+  margin-top: 2px;
+}
+
+#btn-timeline:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+
+/* ============================================================
+   HOMEPAGE CARDS — updated with task preview rows
+   ============================================================ */
+
+/* Split card into top-click area + task preview area */
+.home-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  cursor: default;  /* card itself not clickable; sub-elements are */
+}
+
+.home-card-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px 14px;
+  cursor: pointer;
+  transition: background var(--t);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.home-card-top:hover { background: #f8f9ff; }
+
+.home-card-info { flex: 1; }
+
+.home-card-tasks {
+  border-top: 1px solid var(--border);
+  padding: 10px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.home-card-loading {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.home-card-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Individual task preview row inside a home card */
+.home-card-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--t);
+}
+
+.home-card-task-row:hover { background: var(--bg); }
+
+.home-card-task-row.overdue { background: #fff8ee; }
+.home-card-task-row.overdue:hover { background: #fff2d8; }
+
+.home-card-task-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  transition: background var(--t), border-color var(--t);
+}
+
+.home-card-task-dot.done { background: var(--blue); border-color: var(--blue); }
+
+.home-card-task-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Period pill inside the home card task row */
+.home-card-task-pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  border: 1px solid;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* "+ altri N" link */
+.home-card-more {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: color var(--t);
+}
+
+.home-card-more:hover { color: var(--blue); }
+
+
+/* ============================================================
+   TIMELINE VIEW
+   ============================================================ */
+
+#timeline-view {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28px 36px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+#timeline-header h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.8rem;
+  color: var(--blue);
+  letter-spacing: -0.02em;
+}
+
+/* "Mostra completati" checkbox + label */
+.toggle-completed-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-completed-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--blue);
+}
+
+#timeline-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 36px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.timeline-loading {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 40px 0;
+  text-align: center;
+  animation: pulse 1.4s infinite;
+}
+
+/* One period group (header + task rows) */
+.timeline-section { display: flex; flex-direction: column; gap: 6px; }
+
+/* Period section header */
+.timeline-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0 6px;
+  border-bottom: 2px solid var(--period-color, var(--border));
+  margin-bottom: 2px;
+}
+
+.timeline-section-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--period-color, var(--text-muted));
+  flex-shrink: 0;
+}
+
+.timeline-section-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--period-color, var(--text-muted));
+  letter-spacing: 0.01em;
+}
+
+.timeline-section-count {
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--period-color, var(--text-muted));
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 20px;
+  opacity: 0.85;
+}
+
+/* Task rows inside the timeline */
+.timeline-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: box-shadow var(--t), transform var(--t), background var(--t);
+  animation: slideIn 180ms ease both;
+}
+
+.timeline-task-row:hover {
+  box-shadow: var(--shadow);
+  transform: translateX(4px);
+}
+
+/* Overdue: amber left stripe */
+.timeline-task-row.overdue {
+  border-left: 3px solid #e07a00;
+  background: linear-gradient(90deg, #fff8ee 0%, var(--surface) 50px);
+}
+
+/* Completed: muted */
+.timeline-task-row.completed {
+  opacity: 0.55;
+}
+
+.timeline-task-row.completed .tl-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Checkbox in timeline row */
+.tl-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--t), background var(--t);
+  cursor: pointer;
+}
+
+.tl-check:hover { border-color: var(--blue); }
+
+.tl-check.checked { background: var(--blue); border-color: var(--blue); }
+.tl-check.checked::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 8px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+/* Task body in timeline */
+.tl-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tl-name {
+  font-size: 0.92rem;
+  font-weight: 400;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* Meta row: list tag + deadline */
+.tl-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* List category tag — the "label piccolo" the user asked for */
+.tl-list-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* Deadline chip in timeline */
+.tl-deadline {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tl-deadline.past { color: var(--red); font-weight: 600; }
+
+/* Overdue badge "!" in timeline */
+.tl-overdue-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #e07a00;
+  background: #fff3e0;
+  border: 1px solid #e07a00;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   RESPONSIVE — mobile: show agenda button
+   ============================================================ */
+@media (max-width: 700px) {
+  #timeline-header { padding: 16px 18px; }
+  #timeline-content { padding: 12px 18px 60px; }
+}

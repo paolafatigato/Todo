@@ -26,6 +26,7 @@
     <ul id="lists-nav" role="list"></ul>
     <div id="sidebar-footer">
       <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
+      <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
       <div class="auth-controls">
         <button id="btn-login" title="Accedi con Google">Login</button>
         <button id="btn-logout" class="hidden" title="Esci">Logout</button>
@@ -61,6 +62,18 @@
         </div>
       </header>
       <ul id="task-list" role="list"></ul>
+    </section>
+
+    <!-- Timeline / Agenda view: all tasks sorted by planned period -->
+    <section id="timeline-view" class="hidden">
+      <header id="timeline-header">
+        <h1>Agenda</h1>
+        <label class="toggle-completed-label">
+          <input type="checkbox" id="toggle-show-completed" />
+          Mostra completati
+        </label>
+      </header>
+      <div id="timeline-content"></div>
     </section>
 
     <div id="loading">Caricamento…</div>
