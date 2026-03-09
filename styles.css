@@ -801,7 +801,8 @@ body {
     display: none; /* hidden on mobile — use the sidebar toggle if needed */
   }
 
-  #sidebar-footer { padding: 14px 12px; border-top: none; }
+  /* Sidebar footer: reduced width on mobile to free space */
+  #sidebar-footer { padding: 14px 12px; border-top: none; flex: none; width: 160px; margin-left: auto; }
 
   #main { height: calc(100vh - 60px); }
 
