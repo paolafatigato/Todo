@@ -12,7 +12,36 @@
   --yellow:     #FFF088;
   --pink:       #FF98A9;
   --light-blue: #A1BEF8;
-  --red:        #C03D55;
+  --red:        #FF0022;
+  --dark-red:   #CE2D4F;
+  --lilac:      #B285EC;
+  --petal-pink: #DB5ABA;
+
+  --c1:  #FFF088;  /* yellow */
+
+  --c2:  #D9F0B0;  /* yellow → green bridge */
+
+  --c3:  #A1BEF8;  /* light blue */
+
+  --c4:  #6F8FE3;  /* blue bridge */
+
+  --c5:  #3548C0;  /* blue */
+
+  --c6:  #7C6ED8;  /* blue → lilac */
+
+  --c7:  #B285EC;  /* lilac */
+
+  --c8:  #C873D4;  /* lilac → pink */
+
+  --c9:  #DB5ABA;  /* petal pink */
+
+  --c10: #E96FAF;  /* bridge */
+
+  --c11: #FF98A9;  /* pink */
+
+  --c12: #F36B7E;  /* pink → red */
+
+  --c15: #FF0022;  /* red */
 
   /* Semantic aliases */
   --bg:           #f4f6ff;

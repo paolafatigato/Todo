@@ -20,17 +20,26 @@ const db = firebase.firestore();
 // PERIODS
 // ============================================================
 
+// Read a CSS variable from :root, fall back to a provided value
+function cssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+    return (v || '').trim() || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
 const PERIODS = [
-  { key: 'oggi',                     label: 'Oggi',                      color: '#C03D55', getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
-  { key: 'domani',                   label: 'Domani',                    color: '#d45a10', getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
-  { key: 'questa_settimana',         label: 'Questa settimana',          color: '#b07800', getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
-  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: '#7a6e00', getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
-  { key: 'questo_mese',              label: 'Questo mese',               color: '#3548C0', getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
-  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: '#2a6bba', getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
-  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: '#1a8060', getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
-  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: '#6040b0', getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
-  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: '#7a83b8', getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
-  { key: 'prossima_vita',            label: 'Prossima vita',             color: '#aaaaaa', getEnd: () => null,                                                                      getStart: () => null },
+  { key: 'oggi',                     label: 'Oggi',                      color: cssVar('--c15', '#C03D55'), getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
+  { key: 'domani',                   label: 'Domani',                    color: cssVar('--c12', '#d45a10'), getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
+  { key: 'questa_settimana',         label: 'Questa settimana',          color: cssVar('--c11', '#b07800'), getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
+  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: cssVar('--c4', '#7a6e00'), getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
+  { key: 'questo_mese',              label: 'Questo mese',               color: cssVar('--c6', '#3548C0'), getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
+  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: cssVar('--c5', '#2a6bba'), getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
+  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: cssVar('--c4', '#1a8060'), getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
+  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: cssVar('--c3', '#6040b0'), getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
+  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: cssVar('--c2', '#7a83b8'), getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
+  { key: 'prossima_vita',            label: 'Prossima vita',             color: cssVar('--c1', '#aaaaaa'), getEnd: () => null,                                                                      getStart: () => null },
 ];
 
 const getPeriod     = key => PERIODS.find(p => p.key === key) || null;
