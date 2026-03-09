@@ -21,16 +21,16 @@ const db = firebase.firestore();
 // ============================================================
 
 const PERIODS = [
-  { key: 'oggi',                     label: 'Oggi',                      color: '#C03D55', getEnd: () => endOfDay(new Date()) },
-  { key: 'domani',                   label: 'Domani',                    color: '#d45a10', getEnd: () => endOfDay(addDays(new Date(), 1)) },
-  { key: 'questa_settimana',         label: 'Questa settimana',          color: '#b07800', getEnd: () => endOfWeek(new Date()) },
-  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: '#7a6e00', getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)) },
-  { key: 'questo_mese',              label: 'Questo mese',               color: '#3548C0', getEnd: () => endOfMonth(new Date()) },
-  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: '#2a6bba', getEnd: () => endOfMonth(addMonths(new Date(), 1)) },
-  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: '#1a8060', getEnd: () => endOfNextSeason(new Date()) },
-  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: '#6040b0', getEnd: () => endOfSchoolYear(new Date()) },
-  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: '#7a83b8', getEnd: () => endOfDay(addYears(new Date(), 5)) },
-  { key: 'prossima_vita',            label: 'Prossima vita',             color: '#aaaaaa', getEnd: () => null },
+  { key: 'oggi',                     label: 'Oggi',                      color: '#C03D55', getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
+  { key: 'domani',                   label: 'Domani',                    color: '#d45a10', getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
+  { key: 'questa_settimana',         label: 'Questa settimana',          color: '#b07800', getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
+  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: '#7a6e00', getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
+  { key: 'questo_mese',              label: 'Questo mese',               color: '#3548C0', getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
+  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: '#2a6bba', getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
+  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: '#1a8060', getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
+  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: '#6040b0', getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
+  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: '#7a83b8', getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
+  { key: 'prossima_vita',            label: 'Prossima vita',             color: '#aaaaaa', getEnd: () => null,                                                                      getStart: () => null },
 ];
 
 const getPeriod     = key => PERIODS.find(p => p.key === key) || null;
@@ -123,6 +123,77 @@ function isDeadlinePast(isoStr) {
   return Date.now() > new Date(y,m-1,d,23,59,59,999).getTime();
 }
 
+// --- Start-of-period helpers (used by calendar) ---
+
+function startOfDayMs(date) {
+  const d = new Date(date);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** Monday of the week containing `date`, midnight */
+function startOfWeekMs(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const daysToMon = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + daysToMon);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+/** First day of the month of `date`, midnight */
+function startOfMonthMs(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+}
+
+/** First day of the NEXT meteorological season */
+function startOfNextSeasonMs(date) {
+  const m = date.getMonth();
+  let cur = m <= 1 || m === 11 ? 0 : m <= 4 ? 1 : m <= 7 ? 2 : 3;
+  const next = (cur + 1) % 4;
+  const firstMonths = [2, 5, 8, 11]; // Mar, Jun, Sep, Dec (0-indexed)
+  const startMonth = firstMonths[next];
+  let startYear = date.getFullYear();
+  if (startMonth <= m) startYear++;
+  return new Date(startYear, startMonth, 1).getTime();
+}
+
+/** September 1 of the current or next Italian school year */
+function startOfSchoolYearMs(date) {
+  const y = date.getFullYear(), m = date.getMonth();
+  const startYear = m >= 8 ? y : y - 1; // Sep=8
+  return new Date(startYear, 8, 1).getTime(); // Sep 1
+}
+
+/**
+ * Given a task with a plannedPeriod, return [startMs, endMs] of that period
+ * computed relative to TODAY. Returns null if no period or prossima_vita.
+ */
+function getTaskPeriodRange(task) {
+  if (!task.plannedPeriod) return null;
+  const p = getPeriod(task.plannedPeriod);
+  if (!p) return null;
+  const start = p.getStart();
+  const end   = p.getEnd();
+  if (start === null || end === null) return null;
+  return [start, end];
+}
+
+/**
+ * ISO date string "YYYY-MM-DD" for a given year/month/day (1-based month).
+ */
+function toIso(year, month, day) {
+  return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+
+/**
+ * True if the day represented by `isoStr` falls within [startMs, endMs].
+ */
+function dayInRange(isoStr, startMs, endMs) {
+  const [y,m,d] = isoStr.split('-').map(Number);
+  const dayStart = new Date(y, m-1, d).getTime();
+  const dayEnd   = new Date(y, m-1, d, 23, 59, 59, 999).getTime();
+  return dayStart <= endMs && dayEnd >= startMs;
+}
+
 
 // ============================================================
 // AUTO-ADVANCE OVERDUE TASKS
@@ -168,6 +239,14 @@ const state = {
 let currentUserUid    = null;
 let unsubscribeLists  = null;
 
+// Calendar state — persists across month navigation
+const calState = {
+  year: new Date().getFullYear(),
+  month: new Date().getMonth(), // 0-indexed
+  selectedIso: null,            // "YYYY-MM-DD"
+  allTasks: [],                 // flat cache of tasks with .listId
+};
+
 
 // ============================================================
 // DOM REFERENCES
@@ -177,10 +256,20 @@ const el = {
   btnNewList:           document.getElementById('btn-new-list'),
   btnHome:              document.getElementById('btn-home'),
   btnTimeline:          document.getElementById('btn-timeline'),
+  btnCalendar:          document.getElementById('btn-calendar'),
   loading:              document.getElementById('loading'),
   homepage:             document.getElementById('homepage'),
   listView:             document.getElementById('list-view'),
   timelineView:         document.getElementById('timeline-view'),
+  calendarView:         document.getElementById('calendar-view'),
+  calendarGrid:         document.getElementById('calendar-grid'),
+  calMonthLabel:        document.getElementById('cal-month-label'),
+  calBtnPrev:           document.getElementById('cal-btn-prev'),
+  calBtnNext:           document.getElementById('cal-btn-next'),
+  calBtnToday:          document.getElementById('cal-btn-today'),
+  calDayPanel:          document.getElementById('cal-day-panel'),
+  calDayPanelTitle:     document.getElementById('cal-day-panel-title'),
+  calDayPanelContent:   document.getElementById('cal-day-panel-content'),
   timelineContent:      document.getElementById('timeline-content'),
   toggleShowCompleted:  document.getElementById('toggle-show-completed'),
   homeCards:            document.getElementById('home-cards'),
@@ -326,6 +415,7 @@ function listenLists() {
     // Also refresh whichever view is currently active
     if (!el.homepage.classList.contains('hidden'))      renderHomepage();
     if (!el.timelineView.classList.contains('hidden'))  renderTimeline();
+    if (!el.calendarView.classList.contains('hidden'))  { refreshCalendarTasks().then(renderCalendar); }
 
     if (!el.loading.classList.contains('hidden')) {
       el.loading.classList.add('hidden');
@@ -361,6 +451,18 @@ function hideAllViews() {
   el.homepage.classList.add('hidden');
   el.listView.classList.add('hidden');
   el.timelineView.classList.add('hidden');
+  el.calendarView.classList.add('hidden');
+}
+
+async function showCalendar() {
+  hideAllViews();
+  el.calendarView.classList.remove('hidden');
+  state.activeListId = null;
+  if (state.unsubscribeTasks) { state.unsubscribeTasks(); state.unsubscribeTasks = null; }
+  closeDetailPanel();
+  renderSidebar();
+  await refreshCalendarTasks();
+  renderCalendar();
 }
 
 function showHomepage() {
@@ -862,6 +964,25 @@ function bindEvents() {
   el.btnNewListHome.addEventListener('click', showModal);
   el.btnHome.addEventListener('click', showHomepage);
   el.btnTimeline.addEventListener('click', showTimeline);
+  if (el.btnCalendar) el.btnCalendar.addEventListener('click', showCalendar);
+
+  // Calendar navigation
+  if (el.calBtnPrev) el.calBtnPrev.addEventListener('click', () => {
+    calState.month--; if (calState.month < 0) { calState.month = 11; calState.year--; }
+    calState.selectedIso = null;
+    refreshCalendarTasks().then(renderCalendar);
+  });
+  if (el.calBtnNext) el.calBtnNext.addEventListener('click', () => {
+    calState.month++; if (calState.month > 11) { calState.month = 0; calState.year++; }
+    calState.selectedIso = null;
+    refreshCalendarTasks().then(renderCalendar);
+  });
+  if (el.calBtnToday) el.calBtnToday.addEventListener('click', () => {
+    const now = new Date();
+    calState.year = now.getFullYear(); calState.month = now.getMonth();
+    calState.selectedIso = null;
+    refreshCalendarTasks().then(renderCalendar);
+  });
 
   el.btnModalCancel.addEventListener('click', hideModal);
   el.btnModalCreate.addEventListener('click', handleCreateList);
@@ -953,6 +1074,232 @@ function bindEvents() {
   if (el.btnLogin)        el.btnLogin.addEventListener('click', loginWithGoogle);
   if (el.btnLogout)       el.btnLogout.addEventListener('click', logoutUser);
   if (el.btnOverlayLogin) el.btnOverlayLogin.addEventListener('click', loginWithGoogle);
+}
+
+
+// ============================================================
+// CALENDAR ENGINE
+// ============================================================
+
+const IT_MONTHS = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const IT_DAYS_SHORT = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+
+/** Fetch all tasks from all lists and cache in calState.allTasks */
+async function refreshCalendarTasks() {
+  try {
+    calState.allTasks = await fetchAllTasks();
+  } catch (e) {
+    calState.allTasks = [];
+  }
+}
+
+/**
+ * Main calendar renderer.
+ * Builds the month grid, marks deadline dots and period-coverage bands.
+ */
+function renderCalendar() {
+  if (el.calendarView.classList.contains('hidden')) return;
+
+  const { year, month } = calState;
+  const today = new Date();
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  // Update header label
+  el.calMonthLabel.textContent = `${IT_MONTHS[month]} ${year}`;
+
+  // Compute period ranges for all tasks once (relative to today)
+  const taskRanges = calState.allTasks
+    .filter(t => !t.completed && t.plannedPeriod)
+    .map(t => {
+      const range = getTaskPeriodRange(t);
+      return range ? { task: t, start: range[0], end: range[1] } : null;
+    })
+    .filter(Boolean);
+
+  // Deadline tasks: map iso date → tasks[]
+  const deadlineMap = {};
+  calState.allTasks.filter(t => !t.completed && t.deadline).forEach(t => {
+    if (!deadlineMap[t.deadline]) deadlineMap[t.deadline] = [];
+    deadlineMap[t.deadline].push(t);
+  });
+
+  // Build day cells
+  // Day 1 of this month lands on which ISO day-of-week? (Mon=0 … Sun=6)
+  const firstDay = new Date(year, month, 1);
+  const firstDow = firstDay.getDay(); // 0=Sun
+  const offset   = firstDow === 0 ? 6 : firstDow - 1; // cells to skip before day 1
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  el.calendarGrid.innerHTML = '';
+
+  // Day-of-week headers
+  IT_DAYS_SHORT.forEach((d, i) => {
+    const h = document.createElement('div');
+    h.className = 'cal-dow-header' + (i >= 5 ? ' weekend' : '');
+    h.textContent = d;
+    el.calendarGrid.appendChild(h);
+  });
+
+  // Blank cells before the 1st
+  for (let i = 0; i < offset; i++) {
+    const blank = document.createElement('div');
+    blank.className = 'cal-day cal-day--blank';
+    el.calendarGrid.appendChild(blank);
+  }
+
+  // Day cells
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso  = toIso(year, month + 1, day);
+    const dow  = (offset + day - 1) % 7; // 0=Mon … 6=Sun
+    const isToday    = iso === todayIso;
+    const isSelected = iso === calState.selectedIso;
+    const isPast     = iso < todayIso;
+    const isWeekend  = dow >= 5;
+
+    // Collect period tasks covering this day
+    const periodTasks = taskRanges.filter(r => dayInRange(iso, r.start, r.end)).map(r => r.task);
+    // Collect deadline tasks
+    const dlTasks = deadlineMap[iso] || [];
+
+    const cell = document.createElement('div');
+    cell.className = [
+      'cal-day',
+      isToday    ? 'cal-day--today'    : '',
+      isSelected ? 'cal-day--selected' : '',
+      isPast     ? 'cal-day--past'     : '',
+      isWeekend  ? 'cal-day--weekend'  : '',
+    ].filter(Boolean).join(' ');
+    cell.dataset.iso = iso;
+
+    // Period color bands (top strip) — show up to 4 distinct period colors
+    const seenPeriods = new Set();
+    const bands = periodTasks
+      .filter(t => { if (seenPeriods.has(t.plannedPeriod)) return false; seenPeriods.add(t.plannedPeriod); return true; })
+      .slice(0, 4);
+
+    const bandsHtml = bands.length > 0
+      ? `<div class="cal-day-bands">${bands.map(t => {
+          const p = getPeriod(t.plannedPeriod);
+          return `<span class="cal-day-band" style="background:${p.color}"></span>`;
+        }).join('')}</div>`
+      : '';
+
+    // Dot indicators
+    const allDots = [
+      ...dlTasks.map(t => ({ color: getPeriod(t.plannedPeriod)?.color || '#C03D55', type: 'deadline', title: t.name })),
+      ...periodTasks.slice(0, 3).map(t => ({ color: getPeriod(t.plannedPeriod)?.color || '#3548C0', type: 'period', title: t.name })),
+    ];
+    const MAX_DOTS = 5;
+    const shown    = allDots.slice(0, MAX_DOTS);
+    const overflow = allDots.length - shown.length;
+
+    const dotsHtml = shown.length > 0
+      ? `<div class="cal-day-dots">
+          ${shown.map(d =>
+            `<span class="cal-dot cal-dot--${d.type}" style="background:${d.color}" title="${escapeHtml(d.title)}"></span>`
+          ).join('')}
+          ${overflow > 0 ? `<span class="cal-dot-overflow">+${overflow}</span>` : ''}
+        </div>`
+      : '';
+
+    cell.innerHTML = `
+      ${bandsHtml}
+      <span class="cal-day-num">${day}</span>
+      ${dotsHtml}
+    `;
+
+    cell.addEventListener('click', () => selectCalendarDay(iso, periodTasks, dlTasks));
+    el.calendarGrid.appendChild(cell);
+  }
+
+  // Update day panel if a day is selected
+  if (calState.selectedIso) {
+    const selPeriod = taskRanges.filter(r => dayInRange(calState.selectedIso, r.start, r.end)).map(r => r.task);
+    const selDeadline = deadlineMap[calState.selectedIso] || [];
+    renderCalDayPanel(calState.selectedIso, selPeriod, selDeadline);
+  } else {
+    el.calDayPanel.classList.add('cal-day-panel--empty');
+    el.calDayPanelTitle.textContent = 'Seleziona un giorno';
+    el.calDayPanelContent.innerHTML =
+      '<p class="cal-panel-hint">Clicca su un giorno per vedere i task programmati.</p>';
+  }
+}
+
+/** Handle a day cell click: highlight and show its tasks */
+function selectCalendarDay(iso, periodTasks, dlTasks) {
+  calState.selectedIso = iso;
+  // Re-highlight selected in the grid
+  el.calendarGrid.querySelectorAll('.cal-day').forEach(c => {
+    c.classList.toggle('cal-day--selected', c.dataset.iso === iso);
+  });
+  renderCalDayPanel(iso, periodTasks, dlTasks);
+}
+
+/** Render the right-hand day detail panel */
+function renderCalDayPanel(iso, periodTasks, dlTasks) {
+  el.calDayPanel.classList.remove('cal-day-panel--empty');
+
+  const [y, m, d] = iso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const dayNames = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((date - today) / 86400000);
+  const sub = diff === 0 ? 'Oggi' : diff === 1 ? 'Domani' : diff === -1 ? 'Ieri' : diff < 0 ? `${-diff} giorni fa` : `Fra ${diff} giorni`;
+
+  el.calDayPanelTitle.innerHTML =
+    `<span class="cal-panel-dow">${dayNames[date.getDay()]}</span>
+     <span class="cal-panel-date">${d} ${IT_MONTHS[m-1]}</span>
+     <span class="cal-panel-rel">${sub}</span>`;
+
+  el.calDayPanelContent.innerHTML = '';
+  const listNames = {};
+  state.lists.forEach(l => { listNames[l.id] = l.name; });
+
+  // Deadline section
+  if (dlTasks.length > 0) {
+    const sec = buildCalPanelSection('⏰ Scadenze', dlTasks, listNames, true);
+    el.calDayPanelContent.appendChild(sec);
+  }
+
+  // Period section
+  const periodOnly = periodTasks.filter(t => !dlTasks.find(d => d.id === t.id));
+  if (periodOnly.length > 0) {
+    const sec = buildCalPanelSection('📅 In programma', periodOnly, listNames, false);
+    el.calDayPanelContent.appendChild(sec);
+  }
+
+  if (dlTasks.length === 0 && periodOnly.length === 0) {
+    el.calDayPanelContent.innerHTML =
+      '<p class="cal-panel-hint">Nessun task per questo giorno.</p>';
+  }
+}
+
+/** Build a titled section of task rows for the calendar day panel */
+function buildCalPanelSection(title, tasks, listNames, isDeadline) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-panel-section';
+  wrap.innerHTML = `<div class="cal-panel-section-title">${title}</div>`;
+
+  tasks.forEach(task => {
+    const period = task.plannedPeriod ? getPeriod(task.plannedPeriod) : null;
+    const row = document.createElement('div');
+    row.className = 'cal-panel-row' + (task.overdue ? ' overdue' : '') + (task.completed ? ' completed' : '');
+    row.innerHTML = `
+      <span class="cal-panel-dot" style="background:${period ? period.color : '#C03D55'}"></span>
+      <div class="cal-panel-row-body">
+        <span class="cal-panel-row-name">${escapeHtml(task.name)}</span>
+        <div class="cal-panel-row-meta">
+          <span class="tl-list-tag">${escapeHtml(listNames[task.listId] || '–')}</span>
+          ${period ? `<span class="cal-panel-period-pill" style="color:${period.color};border-color:${period.color}50;background:${period.color}12">${period.label}</span>` : ''}
+        </div>
+      </div>
+    `;
+    row.addEventListener('click', () => openList(task.listId, task.id));
+    wrap.appendChild(row);
+  });
+
+  return wrap;
 }
 
 

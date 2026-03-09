@@ -27,6 +27,7 @@
     <div id="sidebar-footer">
       <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
       <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
+      <button id="btn-calendar" title="Calendario">◫ Calendario</button>
       <div class="auth-controls">
         <button id="btn-login" title="Accedi con Google">Login</button>
         <button id="btn-logout" class="hidden" title="Esci">Logout</button>
@@ -74,6 +75,38 @@
         </label>
       </header>
       <div id="timeline-content"></div>
+    </section>
+
+    <!-- Calendar view -->
+    <section id="calendar-view" class="hidden">
+
+      <!-- Sticky top bar with month nav -->
+      <header id="calendar-header">
+        <div id="cal-nav">
+          <button id="cal-btn-prev" title="Mese precedente">&#8592;</button>
+          <span id="cal-month-label">—</span>
+          <button id="cal-btn-next" title="Mese successivo">&#8594;</button>
+        </div>
+        <button id="cal-btn-today">Oggi</button>
+      </header>
+
+      <div id="calendar-body">
+        <!-- Left: month grid -->
+        <div id="calendar-grid-wrap">
+          <div id="calendar-grid">
+            <!-- day-of-week headers + day cells injected by JS -->
+          </div>
+        </div>
+
+        <!-- Right: selected-day detail panel -->
+        <aside id="cal-day-panel" class="cal-day-panel--empty">
+          <div id="cal-day-panel-title">Seleziona un giorno</div>
+          <div id="cal-day-panel-content">
+            <p class="cal-panel-hint">Clicca su un giorno per vedere i task programmati.</p>
+          </div>
+        </aside>
+      </div>
+
     </section>
 
     <div id="loading">Caricamento…</div>
