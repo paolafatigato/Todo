@@ -832,7 +832,7 @@ function openDetailPanel(taskId) {
   if (!task) return;
 
   state.activeTaskId = taskId;
-  el.detailTitle.textContent = task.name;
+  el.detailTitle.value = task.name;
   el.detailNotes.value = task.notes || '';
   el.btnComplete.textContent = task.completed ? 'Segna incompleto' : 'Segna completo';
   el.detailDeadline.value = task.deadline || '';
@@ -991,6 +991,16 @@ function bindEvents() {
   el.btnModalCreate.addEventListener('click', handleCreateList);
   el.modalListName.addEventListener('keydown', e => { if (e.key === 'Enter') handleCreateList(); });
   el.modalBackdrop.addEventListener('click', e => { if (e.target === el.modalBackdrop) hideModal(); });
+
+  if (el.detailTitle) {
+    el.detailTitle.addEventListener('blur', () => {
+      if (!state.activeTaskId) return;
+      const name = el.detailTitle.value.trim();
+      if (!name) return;
+      updateTask(state.activeTaskId, { name });
+    });
+    el.detailTitle.addEventListener('keydown', e => { if (e.key === 'Enter') el.detailTitle.blur(); });
+  }
 
   el.listTitleInput.addEventListener('blur', () => {
     const name = el.listTitleInput.value.trim();
