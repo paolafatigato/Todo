@@ -284,6 +284,7 @@ const el = {
   detailTitle:          document.getElementById('detail-task-title'),
   detailNotes:          document.getElementById('detail-notes'),
   btnCloseDetail:       document.getElementById('btn-close-detail'),
+  btnSaveDetail:        document.getElementById('btn-save-detail'),
   btnComplete:          document.getElementById('btn-complete-task'),
   btnDeleteTask:        document.getElementById('btn-delete-task'),
   overlay:              document.getElementById('overlay'),
@@ -1021,6 +1022,7 @@ function bindEvents() {
 
   el.btnCloseDetail.addEventListener('click', closeDetailPanel);
   el.overlay.addEventListener('click', closeDetailPanel);
+  if (el.btnSaveDetail) el.btnSaveDetail.addEventListener('click', closeDetailPanel);
 
   el.detailNotes.addEventListener('input', () => { if (state.activeTaskId) saveNotesDebounced(state.activeTaskId, el.detailNotes.value); });
 

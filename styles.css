@@ -589,7 +589,7 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
-  margin-bottom: -14px;
+  margin-bottom: 3px;
 }
 
 #detail-notes {
@@ -648,6 +648,21 @@ body {
   background: var(--danger);
   color: #fff;
 }
+
+/* Save button in detail panel — placed above the complete button */
+#btn-save-detail {
+  padding: 11px;
+  background: var(--yellow);
+  color: var(--blue);
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background var(--t), transform var(--t);
+  text-align: center;
+  border: none;
+}
+
+#btn-save-detail:hover { background: #fff79a; transform: translateY(-1px); }
 
 /* ----------------------------------------------------------
    OVERLAY (mobile detail panel backdrop)
