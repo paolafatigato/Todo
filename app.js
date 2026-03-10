@@ -42,7 +42,23 @@ const PERIODS = [
   { key: 'prossima_vita',            label: 'Prossima vita',             color: cssVar('--c1', '#FFF088'), getEnd: () => null,                                                                      getStart: () => null },
 ];
 
-const getPeriod     = key => PERIODS.find(p => p.key === key) || null;
+// ─── DAILY RECURRING PERIOD ───────────────────────────────────
+// Kept outside the PERIODS array so it never participates in
+// the auto-advance chain (getEnd → null means plannedPeriodUntil
+// stays null and the advance guard short-circuits).
+const DAILY_PERIOD = {
+  key:      'ogni_giorno',
+  label:    'Ogni giorno',
+  color:    '#FF0022',          // used as gradient fallback in JS; actual display via CSS class
+  getEnd:   () => null,
+  getStart: () => startOfDayMs(new Date()),
+};
+
+const getPeriod = key => {
+  if (key === 'ogni_giorno') return DAILY_PERIOD;
+  return PERIODS.find(p => p.key === key) || null;
+};
+
 const nextPeriodKey = key => {
   const idx = PERIODS.findIndex(p => p.key === key);
   return (idx >= 0 && idx < PERIODS.length - 1) ? PERIODS[idx + 1].key : null;
@@ -54,6 +70,7 @@ const nextPeriodKey = key => {
  */
 function periodSortKey(task) {
   if (!task.plannedPeriod) return 9999;
+  if (task.plannedPeriod === 'ogni_giorno') return 0; // appears with 'oggi' in sorted order
   const idx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
   return idx >= 0 ? idx : 9999;
 }
@@ -80,6 +97,37 @@ function sortTasksBySchedule(tasks) {
     if (da !== db2) return da - db2;
     return (a.name || '').localeCompare(b.name || '');
   });
+}
+
+// ─── DAILY TASK HELPERS ───────────────────────────────────────
+
+/**
+ * A daily task is "completed for today" only when its
+ * lastCompletedDate matches today's ISO string.
+ * Regular tasks just use the boolean field as-is.
+ */
+function isDailyTaskEffectivelyCompleted(task) {
+  if (task.plannedPeriod !== 'ogni_giorno') return task.completed;
+  const today = new Date();
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  return !!task.completed && task.lastCompletedDate === todayIso;
+}
+
+/**
+ * Build the Firestore update object for toggling a task's completion.
+ * For daily tasks, also stamps / clears lastCompletedDate.
+ */
+function buildCompleteUpdate(task, newCompleted) {
+  const data = { completed: newCompleted };
+  if (task.plannedPeriod === 'ogni_giorno') {
+    if (newCompleted) {
+      const today = new Date();
+      data.lastCompletedDate = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    } else {
+      data.lastCompletedDate = null;
+    }
+  }
+  return data;
 }
 
 
@@ -210,10 +258,24 @@ function dayInRange(isoStr, startMs, endMs) {
 
 async function autoAdvanceOverdueTasks(listId) {
   const now = Date.now();
+  const today = new Date();
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
   const batch = db.batch();
   let hasChanges = false;
 
   state.tasks.forEach(task => {
+    // ── Daily recurring: reset if completed on a previous day ──────
+    if (task.plannedPeriod === 'ogni_giorno' && task.completed) {
+      if (task.lastCompletedDate !== todayIso) {
+        const reset = { completed: false, lastCompletedDate: null };
+        batch.update(tasksRef(listId).doc(task.id), reset);
+        Object.assign(task, reset);
+        hasChanges = true;
+      }
+      return; // skip normal auto-advance logic for daily tasks
+    }
+
+    // ── Normal auto-advance ────────────────────────────────────────
     if (task.overdue || !task.plannedPeriod || task.completed ||
         !task.plannedPeriodUntil || now <= task.plannedPeriodUntil) return;
 
@@ -630,9 +692,13 @@ function renderHomeCardTasks(listId, tasks) {
     row.innerHTML = `
       <span class="home-card-task-dot ${task.completed ? 'done' : ''}"></span>
       <span class="home-card-task-name">${escapeHtml(task.name)}</span>
-      ${period ? `<span class="home-card-task-pill"
-          style="color:${period.color};border-color:${period.color}50;background:${period.color}12"
-        >${period.label}</span>` : ''}
+      ${period
+        ? (period.key === 'ogni_giorno'
+            ? `<span class="home-card-task-pill home-card-task-pill--daily">${period.label} ↻</span>`
+            : `<span class="home-card-task-pill"
+                style="color:${period.color};border-color:${period.color}50;background:${period.color}12"
+              >${period.label}</span>`)
+        : ''}
     `;
     // Clicking a task row: open its list and then open the detail panel
     row.addEventListener('click', e => {
@@ -681,7 +747,9 @@ async function renderTimeline() {
   }
 
   const showCompleted = el.toggleShowCompleted.checked;
-  const filtered = showCompleted ? allTasks : allTasks.filter(t => !t.completed);
+  const filtered = showCompleted
+    ? allTasks
+    : allTasks.filter(t => !isDailyTaskEffectivelyCompleted(t));
   const sorted   = sortTasksBySchedule(filtered);
 
   if (sorted.length === 0) {
@@ -695,18 +763,20 @@ async function renderTimeline() {
   const listNames = {};
   state.lists.forEach(l => { listNames[l.id] = l.name; });
 
-  // Group tasks by plannedPeriod key (null → 'none')
-  const groups = new Map(); // key → { period|null, tasks[] }
+  // Group tasks by plannedPeriod key.
+  // 'ogni_giorno' tasks are folded into the 'oggi' bucket so they
+  // appear under the "Oggi" section header in the agenda.
+  const groups = new Map(); // groupKey → { period, tasks[] }
 
   sorted.forEach(task => {
-    const key = task.plannedPeriod || '__none__';
-    if (!groups.has(key)) {
-      groups.set(key, {
-        period: task.plannedPeriod ? getPeriod(task.plannedPeriod) : null,
-        tasks: []
-      });
+    const rawKey  = task.plannedPeriod || '__none__';
+    const groupKey = rawKey === 'ogni_giorno' ? 'oggi' : rawKey;
+    const groupPeriod = groupKey !== '__none__' ? getPeriod(groupKey) : null;
+
+    if (!groups.has(groupKey)) {
+      groups.set(groupKey, { period: groupPeriod, tasks: [] });
     }
-    groups.get(key).tasks.push(task);
+    groups.get(groupKey).tasks.push(task);
   });
 
   el.timelineContent.innerHTML = '';
@@ -732,30 +802,33 @@ async function renderTimeline() {
       const listName  = listNames[task.listId] || '–';
       const deadlinePast = isDeadlinePast(task.deadline);
 
+      const isEffectivelyDone = isDailyTaskEffectivelyCompleted(task);
       const row = document.createElement('div');
       row.className = [
         'timeline-task-row',
-        task.completed ? 'completed' : '',
-        task.overdue   ? 'overdue'   : '',
+        isEffectivelyDone ? 'completed' : '',
+        task.overdue      ? 'overdue'   : '',
       ].filter(Boolean).join(' ');
 
       row.innerHTML = `
-        <span class="tl-check ${task.completed ? 'checked' : ''}"></span>
+        <span class="tl-check ${isEffectivelyDone ? 'checked' : ''}"></span>
         <div class="tl-body">
           <span class="tl-name">${escapeHtml(task.name)}</span>
           <div class="tl-meta">
             <span class="tl-list-tag">${escapeHtml(listName)}</span>
             ${task.deadline ? `<span class="tl-deadline ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>` : ''}
             ${task.overdue  ? '<span class="tl-overdue-badge">!</span>' : ''}
+            ${task.plannedPeriod === 'ogni_giorno' ? '<span class="tl-daily-badge">↻</span>' : ''}
           </div>
         </div>
       `;
 
-      // Checkbox: toggle complete directly from timeline
       row.querySelector('.tl-check').addEventListener('click', async e => {
         e.stopPropagation();
-        await updateTaskInList(task.listId, task.id, { completed: !task.completed });
-        renderTimeline(); // re-render to reflect change
+        const nowDone = !isDailyTaskEffectivelyCompleted(task);
+        const updates = buildCompleteUpdate(task, nowDone);
+        await updateTaskInList(task.listId, task.id, updates);
+        renderTimeline();
       });
 
       // Row click: navigate to the list and open the detail panel
@@ -786,11 +859,11 @@ function renderTaskList() {
     return;
   }
 
-  // Split: incomplete tasks keep their manual order; completed sink to the bottom
-  const incomplete = state.tasks.filter(t => !t.completed);
-  const completed  = state.tasks.filter(t =>  t.completed);
+  // Split: incomplete first (manual order), done at the bottom.
+  // For daily tasks "done" means completed today.
+  const incomplete = state.tasks.filter(t => !isDailyTaskEffectivelyCompleted(t));
+  const completed  = state.tasks.filter(t =>  isDailyTaskEffectivelyCompleted(t));
 
-  /** Render a single task <li> and append it to the list */
   function appendTaskRow(task, isDone) {
     const period       = (!isDone && task.plannedPeriod) ? getPeriod(task.plannedPeriod) : null;
     const deadlinePast = isDeadlinePast(task.deadline);
@@ -798,11 +871,11 @@ function renderTaskList() {
     const li = document.createElement('li');
     li.className = [
       'task-item',
-      isDone          ? 'completed' : '',
-      task.overdue    ? 'overdue'   : '',
+      isDone       ? 'completed' : '',
+      task.overdue ? 'overdue'   : '',
     ].filter(Boolean).join(' ');
-    li.dataset.id  = task.id;
-    li.draggable   = !isDone; // completed tasks are not draggable
+    li.dataset.id = task.id;
+    li.draggable  = !isDone;
 
     li.innerHTML = `
       ${isDone ? '' : '<span class="task-drag-handle">⠿</span>'}
@@ -816,39 +889,37 @@ function renderTaskList() {
 
     li.querySelector('[data-action="check"]').addEventListener('click', e => {
       e.stopPropagation();
-      updateTask(task.id, { completed: !task.completed });
+      updateTask(task.id, buildCompleteUpdate(task, !isDailyTaskEffectivelyCompleted(task)));
     });
     li.addEventListener('click', () => openDetailPanel(task.id));
     el.taskList.appendChild(li);
   }
 
-  // 1. Render incomplete tasks (draggable, with period pills)
   incomplete.forEach(task => appendTaskRow(task, false));
 
-  // 2. If there are completed tasks, add a divider then render them
   if (completed.length > 0) {
     const divider = document.createElement('li');
     divider.className = 'task-completed-divider';
-    divider.innerHTML = `
-      <span class="task-completed-divider-label">Completati (${completed.length})</span>
-    `;
+    divider.innerHTML = `<span class="task-completed-divider-label">Completati (${completed.length})</span>`;
     el.taskList.appendChild(divider);
-
     completed.forEach(task => appendTaskRow(task, true));
   }
 
-  // Only the incomplete tasks participate in drag-and-drop ordering
   bindTaskDragDrop();
 }
 
-// isDone=true → hide period pill (task is already done, period no longer relevant)
+// isDone=true → hide period / deadline chips (task already done)
 function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
   const parts = [];
   if (period && !isDone) {
     const bang = task.overdue ? '<span class="period-bang">!</span>' : '';
-    parts.push(`<span class="task-period-pill"
-      style="background:${period.color}18;color:${period.color};border-color:${period.color}50"
-    >${bang}${period.label}</span>`);
+    if (period.key === 'ogni_giorno') {
+      parts.push(`<span class="task-period-pill task-period-pill--daily">${bang}${period.label} ↻</span>`);
+    } else {
+      parts.push(`<span class="task-period-pill"
+        style="background:${period.color}18;color:${period.color};border-color:${period.color}50"
+      >${bang}${period.label}</span>`);
+    }
   }
   if (task.deadline && !isDone) {
     parts.push(`<span class="task-deadline-chip ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>`);
@@ -1074,8 +1145,9 @@ function bindEvents() {
     if (!state.activeTaskId) return;
     const task = state.tasks.find(t => t.id === state.activeTaskId);
     if (!task) return;
-    updateTask(state.activeTaskId, { completed: !task.completed });
-    el.btnComplete.textContent = !task.completed ? 'Segna incompleto' : 'Segna completo';
+    const newCompleted = !isDailyTaskEffectivelyCompleted(task);
+    updateTask(state.activeTaskId, buildCompleteUpdate(task, newCompleted));
+    el.btnComplete.textContent = newCompleted ? 'Segna incompleto' : 'Segna completo';
   });
 
   el.btnDeleteTask.addEventListener('click', async () => {
@@ -1370,6 +1442,12 @@ function escapeHtml(str) {
 
 function populatePeriodSelect() {
   el.detailPeriod.innerHTML = '<option value="">— Nessun periodo —</option>';
+  // Daily recurring period at the top of the list
+  const optDaily = document.createElement('option');
+  optDaily.value       = DAILY_PERIOD.key;
+  optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
+  el.detailPeriod.appendChild(optDaily);
+  // Normal period options
   PERIODS.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.key; opt.textContent = p.label;

@@ -2026,20 +2026,51 @@ body {
   }
 }
 /* ============================================================
+   DAILY RECURRING PERIOD — gradient pill
+   Gradient: #FFF088 → #FF0022 → #B285EC
+   ============================================================ */
+
+.task-period-pill--daily {
+  background: linear-gradient(90deg, #FFF088, #F36B7E 50%, #B285EC) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+  font-weight: 700 !important;
+  letter-spacing: 0.02em;
+}
+
+/* Same gradient on the homepage card preview pill */
+.home-card-task-pill--daily {
+  background: linear-gradient(90deg, #FFF088, #F36B7E 50%, #B285EC) !important;
+  color: #fff !important;
+  border: none !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  font-weight: 700 !important;
+}
+
+/* Small ↻ badge in the timeline meta row */
+.tl-daily-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: linear-gradient(90deg, #FFF088, #F36B7E 50%, #B285EC);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  flex-shrink: 0;
+}
+
+/* ============================================================
    COMPLETED TASKS — divider + faded appearance
    ============================================================ */
 
-/* The task.completed style already exists; strengthen it so items look clearly done */
 .task-item.completed {
   opacity: 0.45;
-  pointer-events: auto; /* still clickable to un-complete */
+  pointer-events: auto;
 }
 .task-item.completed:hover { opacity: 0.65; }
 
-/* Completed tasks: no drag handle needed — remove it visually */
 .task-item.completed .task-drag-handle { display: none; }
 
-/* Section divider between active and completed tasks */
 .task-completed-divider {
   list-style: none;
   display: flex;
