@@ -59,7 +59,12 @@
         </div>
         <div id="add-task-row">
           <input id="task-input" type="text" placeholder="Aggiungi un task e premi Invio…" autocomplete="off" />
-          <button id="btn-add-task">Aggiungi</button>
+          <div id="add-task-meta">
+            <select id="task-period-quick" title="Quando penso di farlo"></select>
+            <input id="task-deadline-quick" type="date" title="Scadenza" />
+            <button id="btn-clear-deadline-quick" class="btn-clear-dl-quick" title="Rimuovi scadenza">✕</button>
+          </div>
+          <button id="btn-add-task">+</button>
         </div>
       </header>
       <ul id="task-list" role="list"></ul>

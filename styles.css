@@ -408,10 +408,20 @@ body {
   display: flex;
   gap: 10px;
   padding-bottom: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+#add-task-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 #task-input {
-  flex: 1;
+  width: 100%;
   padding: 10px 14px;
   border: 2px solid var(--border);
   border-radius: var(--radius);
@@ -426,14 +436,63 @@ body {
   background: #fff;
 }
 
+/* Quick-add meta row: period + deadline */
+#add-task-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#task-period-quick {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t);
+}
+#task-period-quick:focus { border-color: var(--blue); color: var(--text-primary); }
+#task-period-quick:not([value=""]) { color: var(--text-primary); font-weight: 500; }
+
+#task-deadline-quick {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  outline: none;
+  transition: border-color var(--t);
+  width: 130px;
+}
+#task-deadline-quick:focus { border-color: var(--blue); color: var(--text-primary); }
+#task-deadline-quick:valid:not([value=""]) { color: var(--text-primary); }
+
+.btn-clear-dl-quick {
+  padding: 4px 7px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  transition: color var(--t), background var(--t);
+}
+.btn-clear-dl-quick:hover { color: var(--danger); background: rgba(255,0,34,0.07); }
+
 #btn-add-task {
-  padding: 10px 20px;
+  padding: 10px 16px;
   background: var(--blue);
   color: #fff;
   border-radius: var(--radius);
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-weight: 700;
+  font-size: 1.3rem;
+  line-height: 1;
   transition: background var(--t), transform var(--t);
+  align-self: flex-start;
 }
 
 #btn-add-task:hover { background: #2a3aa8; transform: translateY(-1px); }

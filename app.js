@@ -272,19 +272,44 @@ async function autoAdvanceOverdueTasks(listId) {
         Object.assign(task, reset);
         hasChanges = true;
       }
-      return; // skip normal auto-advance logic for daily tasks
+      return;
     }
 
-    // ── Normal auto-advance ────────────────────────────────────────
-    if (task.overdue || !task.plannedPeriod || task.completed ||
-        !task.plannedPeriodUntil || now <= task.plannedPeriodUntil) return;
+    // ── Auto-advance toward present (never forward) ─────────────────
+    // Skip tasks without a period, daily tasks, completed tasks, or
+    // tasks without a known expiry timestamp.
+    if (!task.plannedPeriod || task.plannedPeriod === 'ogni_giorno' || task.completed || !task.plannedPeriodUntil) return;
 
-    const nextKey  = nextPeriodKey(task.plannedPeriod);
-    const nextObj  = nextKey ? getPeriod(nextKey) : null;
-    const update   = {
+    const currentIdx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
+    if (currentIdx <= 0) return; // already at 'oggi' or unknown period
+
+    const daysLeft = (task.plannedPeriodUntil - now) / 86400000; // fractional days
+
+    // Determine the *most specific* (closest-to-now) period that the
+    // remaining time still "fits inside" — i.e., whose end is >= now+daysLeft.
+    // We advance only if that period is strictly closer than the current one.
+    let targetPeriod = null;
+
+    if (daysLeft <= 0) {
+      // Expired → oggi
+      targetPeriod = PERIODS[0]; // 'oggi'
+    } else if (daysLeft <= 1 && currentIdx > 1) {
+      // Less than 1 day left → domani
+      targetPeriod = PERIODS[1]; // 'domani'
+    } else if (daysLeft <= 2 && currentIdx > 1) {
+      // ≤ 2 days left and not already domani/oggi → domani
+      targetPeriod = PERIODS[1];
+    } else if (daysLeft <= 7 && currentIdx > 2) {
+      // ≤ 7 days left and not already questa_settimana or closer → questa_settimana
+      targetPeriod = PERIODS[2]; // 'questa_settimana'
+    }
+
+    if (!targetPeriod) return;
+
+    const update = {
+      plannedPeriod:      targetPeriod.key,
+      plannedPeriodUntil: targetPeriod.getEnd(),
       overdue: true,
-      plannedPeriod: nextKey || task.plannedPeriod,
-      plannedPeriodUntil: nextObj ? nextObj.getEnd() : null,
     };
     batch.update(tasksRef(listId).doc(task.id), update);
     Object.assign(task, update);
@@ -350,6 +375,9 @@ const el = {
   btnDeleteList:        document.getElementById('btn-delete-list'),
   taskInput:            document.getElementById('task-input'),
   btnAddTask:           document.getElementById('btn-add-task'),
+  taskPeriodQuick:      document.getElementById('task-period-quick'),
+  taskDeadlineQuick:    document.getElementById('task-deadline-quick'),
+  btnClearDeadlineQuick:document.getElementById('btn-clear-deadline-quick'),
   taskList:             document.getElementById('task-list'),
   detailPanel:          document.getElementById('detail-panel'),
   detailTitle:          document.getElementById('detail-task-title'),
@@ -449,11 +477,16 @@ async function deleteList(listId) {
 // TASKS — CRUD
 // ============================================================
 
-async function addTask(name) {
+async function addTask(name, periodKey, deadline) {
   if (!state.activeListId || !name.trim()) return;
+  const p     = periodKey ? getPeriod(periodKey) : null;
+  const until = p ? p.getEnd() : null;
   await tasksRef(state.activeListId).add({
     name: name.trim(), completed: false, notes: '', order: state.tasks.length,
-    deadline: null, plannedPeriod: null, plannedPeriodUntil: null, overdue: false,
+    deadline: deadline || null,
+    plannedPeriod: periodKey || null,
+    plannedPeriodUntil: until,
+    overdue: false,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -494,7 +527,7 @@ function listenLists() {
     if (!el.loading.classList.contains('hidden')) {
       el.loading.classList.add('hidden');
       const starred = state.lists.find(l => l.starred);
-      if (starred) openList(starred.id); else showHomepage();
+      if (starred) openList(starred.id); else showTimeline();
     }
   });
 }
@@ -1132,8 +1165,27 @@ function bindEvents() {
     await deleteList(listId);
   });
 
-  el.btnAddTask.addEventListener('click', () => { addTask(el.taskInput.value); el.taskInput.value = ''; el.taskInput.focus(); });
-  el.taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') { addTask(el.taskInput.value); el.taskInput.value = ''; } });
+  function doAddTask() {
+    const name     = el.taskInput.value.trim();
+    const period   = el.taskPeriodQuick?.value  || null;
+    const deadline = el.taskDeadlineQuick?.value || null;
+    if (!name) return;
+    addTask(name, period, deadline);
+    el.taskInput.value = '';
+    if (el.taskDeadlineQuick) el.taskDeadlineQuick.value = '';
+    if (el.taskPeriodQuick)   el.taskPeriodQuick.value   = '';
+    el.taskInput.focus();
+  }
+
+  el.btnAddTask.addEventListener('click', doAddTask);
+  el.taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAddTask(); });
+
+  if (el.btnClearDeadlineQuick) {
+    el.btnClearDeadlineQuick.addEventListener('click', () => {
+      if (el.taskDeadlineQuick) el.taskDeadlineQuick.value = '';
+      el.taskInput.focus();
+    });
+  }
 
   el.btnCloseDetail.addEventListener('click', closeDetailPanel);
   el.overlay.addEventListener('click', closeDetailPanel);
@@ -1441,17 +1493,18 @@ function escapeHtml(str) {
 // ============================================================
 
 function populatePeriodSelect() {
-  el.detailPeriod.innerHTML = '<option value="">— Nessun periodo —</option>';
-  // Daily recurring period at the top of the list
-  const optDaily = document.createElement('option');
-  optDaily.value       = DAILY_PERIOD.key;
-  optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
-  el.detailPeriod.appendChild(optDaily);
-  // Normal period options
-  PERIODS.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.key; opt.textContent = p.label;
-    el.detailPeriod.appendChild(opt);
+  const selects = [el.detailPeriod, el.taskPeriodQuick].filter(Boolean);
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">— Periodo —</option>';
+    const optDaily = document.createElement('option');
+    optDaily.value       = DAILY_PERIOD.key;
+    optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
+    sel.appendChild(optDaily);
+    PERIODS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.key; opt.textContent = p.label;
+      sel.appendChild(opt);
+    });
   });
 }
 
