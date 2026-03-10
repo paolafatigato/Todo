@@ -1026,7 +1026,7 @@ body {
 
 /* Tasks that were auto-advanced get an amber left border + subtle bg */
 .task-item.overdue {
-  border-left: 3px solid #e07a00;
+  border-left: 3px solid var(--yellow);
   background: linear-gradient(90deg, #fff8ee 0%, var(--surface) 60px);
 }
 
@@ -1157,7 +1157,7 @@ body {
    ============================================================ */
 #detail-overdue-bar {
   background: #fff3e0;
-  border: 1px solid #e07a00;
+  border: 1px solid var(--yellow);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   font-size: 0.82rem;
@@ -1424,7 +1424,7 @@ body {
 
 /* Overdue: amber left stripe */
 .timeline-task-row.overdue {
-  border-left: 3px solid #e07a00;
+  border-left: 3px solid var(--yellow);
   background: linear-gradient(90deg, #fff8ee 0%, var(--surface) 50px);
 }
 
@@ -1518,9 +1518,9 @@ body {
 .tl-overdue-badge {
   font-size: 0.72rem;
   font-weight: 800;
-  color: #e07a00;
+  color: var(--yellow);
   background: #fff3e0;
-  border: 1px solid #e07a00;
+  border: 1px solid var(--yellow);
   border-radius: 50%;
   width: 16px;
   height: 16px;
@@ -1916,7 +1916,7 @@ body {
   background: var(--bg);
 }
 .cal-panel-row:hover { background: #eef1ff; box-shadow: var(--shadow); transform: translateX(3px); }
-.cal-panel-row.overdue { border-left: 3px solid #e07a00; background: #fff8ee; }
+.cal-panel-row.overdue { border-left: 3px solid var(--yellow); background: #fff8ee; }
 .cal-panel-row.completed { opacity: 0.5; }
 .cal-panel-row.completed .cal-panel-row-name { text-decoration: line-through; }
 
