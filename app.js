@@ -119,6 +119,12 @@ function isDailyTaskEffectivelyCompleted(task) {
  */
 function buildCompleteUpdate(task, newCompleted) {
   const data = { completed: newCompleted };
+  // Track a timestamp for completions so we can filter "completed today".
+  if (newCompleted) {
+    data.completedAt = firebase.firestore.FieldValue.serverTimestamp();
+  } else {
+    data.completedAt = null;
+  }
   if (task.plannedPeriod === 'ogni_giorno') {
     if (newCompleted) {
       const today = new Date();
@@ -128,6 +134,27 @@ function buildCompleteUpdate(task, newCompleted) {
     }
   }
   return data;
+}
+
+/**
+ * Return true if the task was completed today.
+ * - daily tasks: use `lastCompletedDate` (effective completion for today)
+ * - others: use `completedAt` timestamp (serverTimestamp)
+ */
+function isCompletedToday(task) {
+  const today = new Date();
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  if (task.plannedPeriod === 'ogni_giorno') return isDailyTaskEffectivelyCompleted(task);
+  if (!task.completed) return false;
+  if (!task.completedAt) return false;
+
+  let d;
+  if (typeof task.completedAt.toDate === 'function') d = task.completedAt.toDate();
+  else d = new Date(task.completedAt);
+
+  const iso = toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  return iso === todayIso;
 }
 
 
@@ -780,8 +807,10 @@ async function renderTimeline() {
   }
 
   const showCompleted = el.toggleShowCompleted.checked;
+  // If "show completed" is enabled: include all still-uncompleted tasks
+  // plus those that were completed today. Otherwise show only unfinished tasks.
   const filtered = showCompleted
-    ? allTasks
+    ? allTasks.filter(t => !isDailyTaskEffectivelyCompleted(t) || isCompletedToday(t))
     : allTasks.filter(t => !isDailyTaskEffectivelyCompleted(t));
   const sorted   = sortTasksBySchedule(filtered);
 
@@ -835,7 +864,7 @@ async function renderTimeline() {
       const listName  = listNames[task.listId] || '–';
       const deadlinePast = isDeadlinePast(task.deadline);
 
-      const isEffectivelyDone = isDailyTaskEffectivelyCompleted(task);
+      const isEffectivelyDone = isCompletedToday(task);
       const row = document.createElement('div');
       row.className = [
         'timeline-task-row',
@@ -858,7 +887,7 @@ async function renderTimeline() {
 
       row.querySelector('.tl-check').addEventListener('click', async e => {
         e.stopPropagation();
-        const nowDone = !isDailyTaskEffectivelyCompleted(task);
+        const nowDone = !isCompletedToday(task);
         const updates = buildCompleteUpdate(task, nowDone);
         await updateTaskInList(task.listId, task.id, updates);
         renderTimeline();
