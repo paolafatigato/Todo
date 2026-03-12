@@ -404,6 +404,28 @@ body {
 
 #btn-delete-list:hover { color: var(--danger); }
 
+#list-sort-select {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t), box-shadow var(--t);
+}
+
+#list-sort-select:hover {
+  border-color: var(--blue);
+}
+
+#list-sort-select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.12);
+}
+
 #add-task-row {
   display: flex;
   gap: 10px;

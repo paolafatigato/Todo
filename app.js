@@ -86,13 +86,17 @@ function deadlineSortKey(task) {
 }
 
 /**
- * Sort an array of tasks by: period index → deadline → name.
+ * Sort an array of tasks by: period index → overdue status → deadline → name.
+ * At the same period, tasks with overdue: true come before others.
  * Returns a NEW sorted array (does not mutate).
  */
 function sortTasksBySchedule(tasks) {
   return [...tasks].sort((a, b) => {
     const pa = periodSortKey(a), pb = periodSortKey(b);
     if (pa !== pb) return pa - pb;
+    // At same period, overdue tasks come first
+    const oa = a.overdue ? 0 : 1, ob = b.overdue ? 0 : 1;
+    if (oa !== ob) return oa - ob;
     const da = deadlineSortKey(a), db2 = deadlineSortKey(b);
     if (da !== db2) return da - db2;
     return (a.name || '').localeCompare(b.name || '');
@@ -398,6 +402,7 @@ const el = {
   homeCards:            document.getElementById('home-cards'),
   btnNewListHome:       document.getElementById('btn-new-list-home'),
   listTitleInput:       document.getElementById('list-title-input'),
+  listSortSelect:       document.getElementById('list-sort-select'),
   btnStar:              document.getElementById('btn-star'),
   btnDeleteList:        document.getElementById('btn-delete-list'),
   taskInput:            document.getElementById('task-input'),
@@ -905,6 +910,26 @@ async function renderTimeline() {
 }
 
 
+/**
+ * Sort an array of tasks alphabetically by name.
+ * Returns a NEW sorted array (does not mutate).
+ */
+function sortTasksByName(tasks) {
+  return [...tasks].sort((a, b) => {
+    return (a.name || '').localeCompare(b.name || '', 'it', { numeric: true, sensitivity: 'base' });
+  });
+}
+
+/**
+ * Get the current sort mode from the select element.
+ * Returns: 'inserimento', 'urgenza', or 'nome'.
+ */
+function getCurrentSortMode() {
+  return el.listSortSelect?.value || 'inserimento';
+}
+
+
+
 // ============================================================
 // RENDER — TASK LIST (inside a single list view)
 // ============================================================
@@ -923,8 +948,17 @@ function renderTaskList() {
 
   // Split: incomplete first (manual order), done at the bottom.
   // For daily tasks "done" means completed today.
-  const incomplete = state.tasks.filter(t => !isDailyTaskEffectivelyCompleted(t));
+  let incomplete = state.tasks.filter(t => !isDailyTaskEffectivelyCompleted(t));
   const completed  = state.tasks.filter(t =>  isDailyTaskEffectivelyCompleted(t));
+
+  // Apply sorting based on current sort mode
+  const sortMode = getCurrentSortMode();
+  if (sortMode === 'urgenza') {
+    incomplete = sortTasksBySchedule(incomplete);
+  } else if (sortMode === 'nome') {
+    incomplete = sortTasksByName(incomplete);
+  }
+  // else 'inserimento': keep original order via `order` field
 
   function appendTaskRow(task, isDone) {
     const period       = (!isDone && task.plannedPeriod) ? getPeriod(task.plannedPeriod) : null;
@@ -937,10 +971,10 @@ function renderTaskList() {
       task.overdue ? 'overdue'   : '',
     ].filter(Boolean).join(' ');
     li.dataset.id = task.id;
-    li.draggable  = !isDone;
+    li.draggable  = !isDone && sortMode === 'inserimento'; // only draggable in 'inserimento' mode
 
     li.innerHTML = `
-      ${isDone ? '' : '<span class="task-drag-handle">⠿</span>'}
+      ${isDone || sortMode !== 'inserimento' ? '' : '<span class="task-drag-handle">⠿</span>'}
       <span class="task-check ${isDone ? 'checked' : ''}" data-action="check"></span>
       <div class="task-body">
         <span class="task-name">${escapeHtml(task.name)}</span>
@@ -1174,6 +1208,10 @@ function bindEvents() {
     if (name && state.activeListId) updateList(state.activeListId, { name });
   });
   el.listTitleInput.addEventListener('keydown', e => { if (e.key === 'Enter') el.listTitleInput.blur(); });
+
+  el.listSortSelect.addEventListener('change', () => {
+    renderTaskList();
+  });
 
   el.btnStar.addEventListener('click', async () => {
     if (!state.activeListId) return;
