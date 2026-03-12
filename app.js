@@ -211,6 +211,26 @@ function isDeadlinePast(isoStr) {
   return Date.now() > new Date(y,m-1,d,23,59,59,999).getTime();
 }
 
+/**
+ * Get the override color for an overdue task based on how many days past deadline.
+ * Returns a CSS variable like '--c1', '--c11', '--c12', '--c15' or null if not overdue.
+ * - 0-1 days: --c1 (yellow)
+ * - 1-2 days: --c11 (pink)
+ * - 2-3 days: --c12 (darker pink)
+ * - 3+ days: --c15 (red)
+ */
+function getOverdueColor(task) {
+  if (!task.overdue || !task.plannedPeriodUntil) return null;
+  
+  const now = Date.now();
+  const daysOverdue = (now - task.plannedPeriodUntil) / 86400000; // Convert ms to days
+  
+  if (daysOverdue < 1) return cssVar('--c1', '#FFF088');      // 0-1 days: yellow
+  if (daysOverdue < 2) return cssVar('--c11', '#FF98A9');     // 1-2 days: light pink
+  if (daysOverdue < 3) return cssVar('--c12', '#F36B7E');     // 2-3 days: darker pink
+  return cssVar('--c15', '#FF0022');                          // 3+ days: red
+}
+
 // --- Start-of-period helpers (used by calendar) ---
 
 function startOfDayMs(date) {
@@ -1012,8 +1032,10 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
     if (period.key === 'ogni_giorno') {
       parts.push(`<span class="task-period-pill task-period-pill--daily">${bang}${period.label} ↻</span>`);
     } else {
+      // Use overdue color if task is overdue, otherwise use period color
+      const displayColor = getOverdueColor(task) || period.color;
       parts.push(`<span class="task-period-pill"
-        style="background:${period.color}18;color:${period.color};border-color:${period.color}50"
+        style="background:${displayColor}18;color:${displayColor};border-color:${displayColor}50"
       >${bang}${period.label}</span>`);
     }
   }
