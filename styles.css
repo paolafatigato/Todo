@@ -71,6 +71,7 @@ html, body {
   color: var(--text-primary);
   font-size: 15px;
   line-height: 1.5;
+  overflow: hidden;
 }
 
 button {
@@ -267,7 +268,8 @@ body {
    ---------------------------------------------------------- */
 #homepage {
   padding: 40px 40px 80px;
-  max-width: 900px;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 #home-header {
@@ -378,6 +380,7 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 #list-title-input {
@@ -898,6 +901,237 @@ body {
 #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 #task-list::-webkit-scrollbar { width: 6px; }
 #task-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+
+/* ----------------------------------------------------------
+   RESPONSIVE — desktop large screens
+   ---------------------------------------------------------- */
+@media (min-width: 1200px) {
+  #homepage {
+    max-width: 900px;
+  }
+}
+
+/* ----------------------------------------------------------
+   RESPONSIVE — tablet (iPad, intermediate screens)
+   ---------------------------------------------------------- */
+@media (min-width: 701px) and (max-width: 1199px) {
+  :root {
+    --sidebar-w: 200px;
+    --detail-w: 320px;
+  }
+
+  body {
+    grid-template-columns: var(--sidebar-w) 1fr;
+  }
+
+  #list-header {
+    padding: 20px 24px 0;
+  }
+
+  #task-list {
+    padding: 12px 24px 80px;
+  }
+
+  #homepage {
+    padding: 28px 24px 80px;
+    max-width: 100%;
+  }
+
+  #home-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  #home-header h1 {
+    font-size: 2rem;
+  }
+
+  #home-cards {
+    gap: 12px;
+  }
+
+  .home-card-top {
+    padding: 18px 20px 12px;
+  }
+
+  .home-card {
+    border-left-width: 4px;
+  }
+
+  /* Sidebar adjustments */
+  #sidebar-header {
+    padding: 20px 12px 0;
+  }
+
+  .logo {
+    font-size: 0.95rem;
+    margin-right: 4px;
+  }
+
+  #btn-new-list {
+    width: 28px;
+    height: 28px;
+    font-size: 1.1rem;
+  }
+
+  #lists-nav {
+    padding: 8px 6px;
+    gap: 3px;
+  }
+
+  .nav-item {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .nav-item-name {
+    font-size: 0.88rem;
+  }
+
+  #sidebar-footer {
+    padding: 8px 6px;
+  }
+
+  #btn-home,
+  #btn-timeline,
+  #btn-calendar {
+    padding: 8px 10px;
+    font-size: 0.85rem;
+  }
+
+  /* Auth controls on tablet — inline row */
+  .auth-controls {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  #btn-login,
+  #btn-logout {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 0.7rem;
+  }
+
+  /* Task list adjustments */
+  #list-title-row {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  #list-title-input {
+    font-size: 1.5rem;
+  }
+
+  #list-sort-select {
+    font-size: 0.85rem;
+    padding: 5px 8px;
+  }
+
+  #btn-star {
+    font-size: 1.2rem;
+  }
+
+  #btn-delete-list {
+    font-size: 0.9rem;
+  }
+
+  /* Add task row */
+  #add-task-row {
+    gap: 8px;
+    padding-bottom: 16px;
+  }
+
+  #task-input {
+    font-size: 0.9rem;
+    padding: 9px 12px;
+  }
+
+  #btn-add-task {
+    padding: 9px 14px;
+    font-size: 1.2rem;
+  }
+
+  #add-task-meta {
+    gap: 5px;
+  }
+
+  #task-period-quick {
+    font-size: 0.75rem;
+    padding: 4px 7px;
+  }
+
+  #task-deadline-quick {
+    width: 110px;
+    font-size: 0.75rem;
+    padding: 4px 7px;
+  }
+
+  .btn-clear-dl-quick {
+    padding: 3px 6px;
+  }
+
+  .task-item {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .task-name {
+    font-size: 0.92rem;
+  }
+
+  /* Detail panel width */
+  #detail-panel {
+    width: var(--detail-w);
+  }
+
+  #detail-inner {
+    padding: 24px 20px;
+    gap: 16px;
+  }
+
+  #detail-task-title {
+    font-size: 1.15rem;
+  }
+
+  #detail-notes {
+    min-height: 150px;
+    font-size: 0.85rem;
+  }
+
+  /* Modal adjustments */
+  #modal {
+    width: min(340px, 85vw);
+    padding: 24px 20px;
+  }
+
+  #modal h3 {
+    font-size: 1.15rem;
+    margin-bottom: 12px;
+  }
+
+  /* Timeline view */
+  #timeline-header {
+    padding: 20px 24px;
+  }
+
+  #timeline-header h1 {
+    font-size: 1.8rem;
+  }
+
+  /* Calendar view */
+  #calendar-view {
+    padding: 20px 24px;
+  }
+}
 
 /* ----------------------------------------------------------
    RESPONSIVE — mobile
