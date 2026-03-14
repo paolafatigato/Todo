@@ -120,18 +120,22 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 24px 20px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.12);
+  padding: 24px 20px 0;
+  border-bottom: 1px solid var(--sidebar-bg); /* Invisibile (blu) */
 }
 
 /* On desktop, header contains logo + new-list button */
 #sidebar-new-btn-wrap {
-  padding: 0 20px 8px;
+  padding-left: 8px;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
 }
 
 .logo {
+    display: inline-flex;
+    flex: 0 0 auto;
+    margin-right: 8px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.05rem;
@@ -928,7 +932,7 @@ body {
     flex: 0 0 auto;
     align-items: center;
     justify-content: flex-start;
-    border-right: 1px solid rgba(255,255,255,0.12);
+    border-right: 1px solid var(--sidebar-bg); /* Invisibile (blu) */
   }
 
   /* Section 2 — + button */
@@ -938,7 +942,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-right: 1px solid rgba(255,255,255,0.12);
+    border-right: 1px solid var(--sidebar-bg); /* Invisibile (blu) */
   }
 
   /* Section 3 — Nav buttons (left-aligned, stacked) */
@@ -1694,7 +1698,7 @@ body {
 .auth-controls {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.12);
+  border-top: 1px solid rgba(255,255,255,0.12); /* default desktop */
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -2496,7 +2500,7 @@ body {
   width: 4px;
   height: 7px;
   border: 2px solid #fff;
-  border-top: none;
+  border-top: 1px solid transparent; /* trasparente solo su mobile */
   border-left: none;
   transform: rotate(45deg) translateY(-1px);
 }
