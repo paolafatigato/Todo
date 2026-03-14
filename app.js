@@ -1374,7 +1374,7 @@ async function renderTimeline() {
         </div>
       `;
 
-      // ── Milestone chips + progress bar in timeline ────────────
+      // ── Milestone inline row: barra + chip, sotto il nome ────
       if (!isEffectivelyDone) {
         const ms = task.milestones;
         if (ms && ms.length > 0) {
@@ -1386,20 +1386,25 @@ async function renderTimeline() {
             ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)`
             : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)';
 
-          // Container: chips row + bar
-          const msBlock = document.createElement('div');
-          msBlock.className = 'tl-ms-block';
+          // Single flex row: [bar] [chip] [chip] …
+          const msRow = document.createElement('div');
+          msRow.className = 'tl-ms-row';
 
-          // Chip row
-          const chipsRow = document.createElement('div');
-          chipsRow.className = 'tl-ms-chips';
+          // Mini progress bar (fixed width, left-anchored)
+          const barEl = document.createElement('div');
+          barEl.className = 'tl-ms-bar';
+          barEl.title     = `${doneCnt}/${ms.length}`;
+          barEl.innerHTML = `
+            <span class="tl-ms-bar-fill" style="width:${pct}%;background:${grad}"></span>
+            <span class="tl-ms-bar-label">${doneCnt}/${ms.length}</span>`;
+          msRow.appendChild(barEl);
 
+          // One chip per milestone
           ms.forEach((m, idx) => {
             const chip = document.createElement('span');
             chip.className = 'tl-ms-chip' + (m.done ? ' done' : '');
             chip.textContent = m.name;
-            chip.title = m.done ? 'Clicca per riaprire' : 'Clicca per completare';
-
+            chip.title = m.done ? 'Riaprire' : 'Completare';
             chip.addEventListener('click', async e => {
               e.stopPropagation();
               const freshTask = state.tasks.find(t => t.id === task.id) || task;
@@ -1413,23 +1418,12 @@ async function renderTimeline() {
               await updateTaskInList(task.listId, task.id, updates);
               renderTimeline();
             });
-
-            chipsRow.appendChild(chip);
+            msRow.appendChild(chip);
           });
 
-          // Mini progress bar
-          const progressWrap = document.createElement('div');
-          progressWrap.className = 'tl-ms-bar-wrap';
-          progressWrap.title    = `${doneCnt}/${ms.length} tappe completate`;
-          progressWrap.innerHTML = `
-            <div class="task-mini-progress tl-progress-bar">
-              <span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span>
-              <span class="task-mini-progress-label">${doneCnt}/${ms.length}</span>
-            </div>`;
-
-          msBlock.appendChild(chipsRow);
-          msBlock.appendChild(progressWrap);
-          row.querySelector('.tl-body').appendChild(msBlock);
+          // Insert BEFORE .tl-meta
+          const metaEl = row.querySelector('.tl-meta');
+          row.querySelector('.tl-body').insertBefore(msRow, metaEl);
         }
       }
 

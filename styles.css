@@ -1773,63 +1773,69 @@ body {
    ============================================================ */
 
 /* ============================================================
-   TIMELINE — milestone chips block
+   TIMELINE — milestone inline row (bar + chips, single line)
    ============================================================ */
 
-/* Outer wrapper: chips row above bar */
-.tl-ms-block {
+/* Single flex row sitting between name and meta */
+.tl-ms-row {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 6px;
-}
-
-/* Row of clickable milestone chips */
-.tl-ms-chips {
-  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
+/* Compact progress bar */
+.tl-ms-bar {
+  position: relative;
+  width: 52px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--border);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.tl-ms-bar-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 99px;
+  transition: width 300ms ease;
+}
+
+/* Label hidden — conveyed by chips count */
+.tl-ms-bar-label { display: none; }
+
+/* Clickable milestone chips */
 .tl-ms-chip {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 500;
-  padding: 3px 9px;
+  padding: 1px 7px;
   border-radius: 20px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
+  border: 1px solid var(--border);
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: background var(--t), border-color var(--t), color var(--t), text-decoration var(--t);
+  transition: border-color var(--t), color var(--t), background var(--t);
   white-space: nowrap;
   user-select: none;
+  line-height: 1.6;
 }
 
 .tl-ms-chip:hover {
   border-color: var(--blue);
   color: var(--blue);
-  background: rgba(53,72,192,0.06);
 }
 
-/* Done chip: strikethrough + muted */
 .tl-ms-chip.done {
   text-decoration: line-through;
-  color: #b0b8d8;
-  border-color: #dde3f7;
-  background: #f8f9ff;
+  color: #c0c8e0;
+  border-color: transparent;
 }
 
 .tl-ms-chip.done:hover {
-  border-color: var(--text-muted);
   color: var(--text-muted);
+  border-color: var(--border);
   text-decoration: line-through;
-  background: var(--bg);
-}
-
-/* Bar wrapper */
-.tl-ms-bar-wrap {
-  display: flex;
-  align-items: center;
 }
 
 /* ============================================================
@@ -2086,9 +2092,9 @@ body {
 
 .timeline-task-row {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 14px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -2120,12 +2126,11 @@ body {
 
 /* Checkbox in timeline row */
 .tl-check {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 2px solid var(--border);
   flex-shrink: 0;
-  margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2152,14 +2157,14 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .tl-name {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 400;
-  line-height: 1.4;
+  line-height: 1.35;
   word-break: break-word;
 }
 
@@ -2168,7 +2173,7 @@ body {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 /* List category tag — the "label piccolo" the user asked for */
