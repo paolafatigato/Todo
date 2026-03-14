@@ -454,6 +454,20 @@ const el = {
   detailDeadlineStatus: document.getElementById('detail-deadline-status'),
   detailOverdueBar:     document.getElementById('detail-overdue-bar'),
   btnClearDeadline:     document.getElementById('btn-clear-deadline'),
+  // Progress / milestones
+  detailProgressFill:   document.getElementById('detail-progress-fill'),
+  detailProgressPct:    document.getElementById('detail-progress-pct'),
+  detailMilestones:     document.getElementById('detail-milestones'),
+  addMilestoneInput:    document.getElementById('add-milestone-input'),
+  btnAddMilestone:      document.getElementById('btn-add-milestone'),
+  // Timeline quick-add
+  btnTimelineQuickAdd:  document.getElementById('btn-timeline-quick-add'),
+  tlQuickAddBar:        document.getElementById('timeline-quick-add-bar'),
+  tlTaskInput:          document.getElementById('tl-task-input'),
+  tlTaskListSel:        document.getElementById('tl-task-list-sel'),
+  tlTaskPeriodSel:      document.getElementById('tl-task-period-sel'),
+  btnTlAdd:             document.getElementById('btn-tl-add'),
+  btnTlCancel:          document.getElementById('btn-tl-cancel'),
 };
 
 
@@ -557,6 +571,73 @@ let notesTimer;
 function saveNotesDebounced(taskId, notes) {
   clearTimeout(notesTimer);
   notesTimer = setTimeout(() => updateTask(taskId, { notes }), 600);
+}
+
+// ============================================================
+// MILESTONES / PROGRESS
+// ============================================================
+
+function computeProgress(milestones) {
+  if (!milestones || milestones.length === 0) return null;
+  return Math.round(milestones.filter(m => m.done).length / milestones.length * 100);
+}
+
+function renderMilestones(task) {
+  if (!el.detailMilestones || !el.detailProgressFill) return;
+  const milestones = task.milestones || [];
+  const pct = computeProgress(milestones);
+
+  // Update progress bar
+  const fill = pct !== null ? pct : 0;
+  el.detailProgressFill.style.width = fill + '%';
+  el.detailProgressPct.textContent = pct !== null ? pct + '%' : '';
+
+  // Render milestone rows
+  el.detailMilestones.innerHTML = '';
+  milestones.forEach((m, idx) => {
+    const row = document.createElement('div');
+    row.className = 'milestone-row' + (m.done ? ' done' : '');
+    row.innerHTML = `
+      <span class="milestone-check ${m.done ? 'checked' : ''}" data-idx="${idx}"></span>
+      <span class="milestone-name">${escapeHtml(m.name)}</span>
+      <button class="milestone-delete" data-idx="${idx}" title="Rimuovi">✕</button>
+    `;
+    row.querySelector('.milestone-check').addEventListener('click', e => {
+      e.stopPropagation();
+      toggleMilestone(task, idx);
+    });
+    row.querySelector('.milestone-delete').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteMilestone(task, idx);
+    });
+    el.detailMilestones.appendChild(row);
+  });
+}
+
+async function addMilestone(task, name) {
+  if (!name.trim()) return;
+  const milestones = [...(task.milestones || []), {
+    id: Date.now().toString(36), name: name.trim(), done: false
+  }];
+  await updateTask(task.id, { milestones });
+  task.milestones = milestones;
+  renderMilestones(task);
+}
+
+async function toggleMilestone(task, idx) {
+  const milestones = (task.milestones || []).map((m, i) =>
+    i === idx ? { ...m, done: !m.done } : m
+  );
+  await updateTask(task.id, { milestones });
+  task.milestones = milestones;
+  renderMilestones(task);
+}
+
+async function deleteMilestone(task, idx) {
+  const milestones = (task.milestones || []).filter((_, i) => i !== idx);
+  await updateTask(task.id, { milestones });
+  task.milestones = milestones;
+  renderMilestones(task);
 }
 
 
@@ -977,8 +1058,10 @@ function renderTaskList() {
     incomplete = sortTasksBySchedule(incomplete);
   } else if (sortMode === 'nome') {
     incomplete = sortTasksByName(incomplete);
+  } else {
+    // 'inserimento' (default): most recently added first
+    incomplete = [...incomplete].sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
   }
-  // else 'inserimento': keep original order via `order` field
 
   function appendTaskRow(task, isDone) {
     const period       = (!isDone && task.plannedPeriod) ? getPeriod(task.plannedPeriod) : null;
@@ -1075,6 +1158,7 @@ function openDetailPanel(taskId) {
   el.detailPanel.classList.remove('hidden');
   el.detailPanel.classList.add('open');
   el.overlay.classList.remove('hidden');
+  renderMilestones(task);
 }
 
 function updateDeadlineStatus(isoStr) {
@@ -1324,6 +1408,84 @@ function bindEvents() {
 
   // Timeline: re-render when "show completed" toggle changes
   el.toggleShowCompleted.addEventListener('change', renderTimeline);
+
+  // ── Timeline quick-add (urgent task) ────────────────────────
+  if (el.btnTimelineQuickAdd) {
+    el.btnTimelineQuickAdd.addEventListener('click', () => {
+      // Populate list select with current lists
+      el.tlTaskListSel.innerHTML = '';
+      state.lists.forEach(l => {
+        const opt = document.createElement('option');
+        opt.value = l.id;
+        opt.textContent = l.name;
+        el.tlTaskListSel.appendChild(opt);
+      });
+      // Populate period select, default to 'oggi'
+      el.tlTaskPeriodSel.innerHTML = '';
+      const allPeriods = [DAILY_PERIOD, ...PERIODS];
+      allPeriods.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.key;
+        opt.textContent = p.label;
+        if (p.key === 'oggi') opt.selected = true;
+        el.tlTaskPeriodSel.appendChild(opt);
+      });
+      el.tlQuickAddBar.classList.remove('hidden');
+      el.btnTimelineQuickAdd.classList.add('active');
+      setTimeout(() => el.tlTaskInput.focus(), 50);
+    });
+  }
+
+  function hideTlQuickAdd() {
+    el.tlQuickAddBar.classList.add('hidden');
+    el.btnTimelineQuickAdd.classList.remove('active');
+    el.tlTaskInput.value = '';
+  }
+
+  if (el.btnTlCancel) el.btnTlCancel.addEventListener('click', hideTlQuickAdd);
+
+  async function doTlAdd() {
+    const name = el.tlTaskInput.value.trim();
+    const listId = el.tlTaskListSel.value;
+    const periodKey = el.tlTaskPeriodSel.value || 'oggi';
+    if (!name || !listId) return;
+    const p = getPeriod(periodKey);
+    const until = p ? p.getEnd() : null;
+    // Fetch current task count for order
+    const snap = await tasksRef(listId).get();
+    await tasksRef(listId).add({
+      name, completed: false, notes: '', order: snap.size,
+      deadline: null,
+      plannedPeriod: periodKey,
+      plannedPeriodUntil: until,
+      overdue: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      milestones: [],
+    });
+    hideTlQuickAdd();
+    renderTimeline();
+  }
+
+  if (el.btnTlAdd) el.btnTlAdd.addEventListener('click', doTlAdd);
+  if (el.tlTaskInput) el.tlTaskInput.addEventListener('keydown', e => { if (e.key === 'Enter') doTlAdd(); if (e.key === 'Escape') hideTlQuickAdd(); });
+
+  // ── Milestones ───────────────────────────────────────────────
+  if (el.btnAddMilestone) {
+    el.btnAddMilestone.addEventListener('click', () => {
+      if (!state.activeTaskId) return;
+      const task = state.tasks.find(t => t.id === state.activeTaskId);
+      if (!task) return;
+      const name = el.addMilestoneInput.value.trim();
+      if (!name) return;
+      addMilestone(task, name);
+      el.addMilestoneInput.value = '';
+    });
+  }
+  if (el.addMilestoneInput) {
+    el.addMilestoneInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') el.btnAddMilestone.click();
+    });
+  }
 
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {

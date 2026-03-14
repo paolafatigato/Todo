@@ -1559,6 +1559,22 @@ body {
 @media (max-width: 700px) {
   #timeline-header { padding: 16px 18px; }
   #timeline-content { padding: 12px 18px 60px; }
+
+  /* Fix title row overflow: stack title above controls */
+  #list-title-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #list-title-input {
+    flex: 0 0 100%;
+    font-size: 1.35rem;
+  }
+  #list-sort-select {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.82rem;
+    padding: 6px 8px;
+  }
 }
 
 
@@ -2178,3 +2194,276 @@ body {
   color: var(--text-muted);
   white-space: nowrap;
 }
+/* ============================================================
+   TIMELINE HEADER — right-side grouping + quick-add button
+   ============================================================ */
+
+.timeline-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+#btn-timeline-quick-add {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, var(--dark-red) 0%, var(--pink) 100%);
+  color: #fff;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: none;
+  transition: transform var(--t), box-shadow var(--t), opacity var(--t);
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(206,45,79,0.28);
+}
+
+#btn-timeline-quick-add:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(206,45,79,0.38);
+}
+
+#btn-timeline-quick-add.active {
+  opacity: 0.6;
+}
+
+/* Quick-add bar (below timeline header) */
+#timeline-quick-add-bar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 36px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  animation: slideIn 180ms ease both;
+}
+
+#tl-task-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 9px 14px;
+  border: 2px solid var(--dark-red);
+  border-radius: var(--radius);
+  outline: none;
+  font-size: 0.9rem;
+  background: var(--bg);
+  transition: border-color var(--t), box-shadow var(--t);
+}
+
+#tl-task-input:focus {
+  border-color: var(--dark-red);
+  box-shadow: 0 0 0 3px rgba(206,45,79,0.12);
+  background: #fff;
+}
+
+#tl-task-list-sel,
+#tl-task-period-sel {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t);
+}
+
+#tl-task-list-sel:focus,
+#tl-task-period-sel:focus { border-color: var(--blue); }
+
+#btn-tl-add {
+  padding: 9px 16px;
+  background: var(--dark-red);
+  color: #fff;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 1.1rem;
+  transition: background var(--t);
+}
+
+#btn-tl-add:hover { background: #a52040; }
+
+#btn-tl-cancel {
+  padding: 9px 12px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  transition: color var(--t), background var(--t);
+}
+
+#btn-tl-cancel:hover { color: var(--danger); background: rgba(255,0,34,0.06); }
+
+@media (max-width: 700px) {
+  #timeline-quick-add-bar { padding: 10px 18px; }
+  #tl-task-input { min-width: 0; flex: 0 0 100%; }
+}
+
+
+/* ============================================================
+   PROGRESS BAR & MILESTONES (in detail panel)
+   ============================================================ */
+
+.progress-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+.progress-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar-track {
+  flex: 1;
+  height: 8px;
+  background: var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%);
+  border-radius: 8px;
+  transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+}
+
+.progress-pct {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--blue);
+  min-width: 36px;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+/* Milestone list */
+#detail-milestones {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.milestone-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: background var(--t), opacity var(--t);
+}
+
+.milestone-row.done {
+  opacity: 0.5;
+}
+
+.milestone-row.done .milestone-name {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+/* Milestone checkbox */
+.milestone-check {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color var(--t), background var(--t);
+}
+
+.milestone-check:hover { border-color: var(--blue); }
+
+.milestone-check.checked {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+
+.milestone-check.checked::after {
+  content: '';
+  display: block;
+  width: 4px;
+  height: 7px;
+  border: 2px solid #fff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.milestone-name {
+  flex: 1;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.milestone-delete {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--t), background var(--t), color var(--t);
+}
+
+.milestone-row:hover .milestone-delete { opacity: 1; }
+.milestone-delete:hover { background: var(--border); color: var(--danger); }
+
+/* Add-milestone input row */
+.add-milestone-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+#add-milestone-input {
+  flex: 1;
+  padding: 7px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color var(--t);
+}
+
+#add-milestone-input:focus { border-color: var(--blue); }
+
+#btn-add-milestone {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--t), transform var(--t);
+}
+
+#btn-add-milestone:hover { background: #2a3aa8; transform: scale(1.08); }

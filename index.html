@@ -79,11 +79,22 @@
     <section id="timeline-view" class="hidden">
       <header id="timeline-header">
         <h1>Agenda</h1>
-        <label class="toggle-completed-label">
-          <input type="checkbox" id="toggle-show-completed" />
-          Mostra completati
-        </label>
+        <div class="timeline-header-right">
+          <button id="btn-timeline-quick-add" title="Aggiungi task urgente">⚡ Urgente</button>
+          <label class="toggle-completed-label">
+            <input type="checkbox" id="toggle-show-completed" />
+            Mostra completati
+          </label>
+        </div>
       </header>
+      <!-- Quick-add bar (hidden by default) -->
+      <div id="timeline-quick-add-bar" class="hidden">
+        <input id="tl-task-input" type="text" placeholder="Nome task urgente…" autocomplete="off" />
+        <select id="tl-task-list-sel" title="Lista"></select>
+        <select id="tl-task-period-sel" title="Periodo"></select>
+        <button id="btn-tl-add" title="Aggiungi">+</button>
+        <button id="btn-tl-cancel" title="Annulla">✕</button>
+      </div>
       <div id="timeline-content"></div>
     </section>
 
@@ -156,6 +167,22 @@
             <button id="btn-clear-deadline" title="Rimuovi data di inizio">✕</button>
           </div>
           <span id="detail-deadline-status" class="deadline-status"></span>
+        </div>
+      </div>
+
+      <!-- PROGRESS & MILESTONES -->
+      <div class="detail-section progress-section" id="detail-progress-section">
+        <div class="detail-section-title">Avanzamento</div>
+        <div class="progress-bar-row">
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="detail-progress-fill"></div>
+          </div>
+          <span class="progress-pct" id="detail-progress-pct"></span>
+        </div>
+        <div id="detail-milestones"></div>
+        <div class="add-milestone-row">
+          <input id="add-milestone-input" type="text" placeholder="Nuova tappa…" autocomplete="off" />
+          <button id="btn-add-milestone" title="Aggiungi tappa">+</button>
         </div>
       </div>
 
