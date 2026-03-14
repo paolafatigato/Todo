@@ -1376,6 +1376,20 @@ body {
   border-color: #ffccd4;
 }
 
+/* Recurrence badge (↻ Ogni settimana etc.) */
+.task-recurrence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 /* ============================================================
    OVERDUE TASK HIGHLIGHT
    ============================================================ */
@@ -1507,6 +1521,80 @@ body {
 
 .deadline-status.ok   { color: #1a8060; }
 .deadline-status.past { color: var(--red); font-weight: 600; }
+
+/* ============================================================
+   DETAIL PANEL — recurrence section
+   ============================================================ */
+
+.recurrence-section {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  gap: 14px;
+}
+
+/* The recurrence type select shares the same look as #detail-period */
+#detail-recurrence-type {
+  width: 100%;
+  padding: 9px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--t);
+  appearance: auto;
+}
+
+#detail-recurrence-type:focus { border-color: var(--blue); }
+
+/* Seven day buttons */
+.recurrence-day-picker {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.recurrence-day-btn {
+  flex: 1 1 0;
+  min-width: 34px;
+  padding: 6px 4px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition: background var(--t), border-color var(--t), color var(--t), transform var(--t);
+  letter-spacing: 0.02em;
+}
+
+.recurrence-day-btn:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.recurrence-day-btn.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+/* Small hint text below the day picker */
+.recurrence-days-hint {
+  font-size: 0.78rem;
+  color: var(--blue);
+  font-weight: 600;
+  min-height: 1em;
+  display: block;
+}
 
 /* ============================================================
    OVERDUE WARNING BAR in detail panel

@@ -179,6 +179,33 @@
         </div>
       </div>
 
+      <!-- RECURRENCE SECTION -->
+      <div class="detail-section recurrence-section" id="detail-recurrence-section">
+        <div class="detail-section-title">Ricorrenza</div>
+        <div class="planning-field">
+          <label for="detail-recurrence-type">Si ripete</label>
+          <select id="detail-recurrence-type">
+            <option value="">Mai</option>
+            <option value="daily">Ogni giorno</option>
+            <option value="weekly">Ogni settimana</option>
+            <option value="monthly">Ogni mese</option>
+          </select>
+        </div>
+        <div class="planning-field recurrence-days-wrap hidden" id="detail-recurrence-days-wrap">
+          <label id="detail-recurrence-days-label">Nei giorni</label>
+          <div class="recurrence-day-picker" id="detail-recurrence-days">
+            <button type="button" class="recurrence-day-btn" data-day="1">Lun</button>
+            <button type="button" class="recurrence-day-btn" data-day="2">Mar</button>
+            <button type="button" class="recurrence-day-btn" data-day="3">Mer</button>
+            <button type="button" class="recurrence-day-btn" data-day="4">Gio</button>
+            <button type="button" class="recurrence-day-btn" data-day="5">Ven</button>
+            <button type="button" class="recurrence-day-btn" data-day="6">Sab</button>
+            <button type="button" class="recurrence-day-btn" data-day="0">Dom</button>
+          </div>
+          <span class="recurrence-days-hint" id="detail-recurrence-hint"></span>
+        </div>
+      </div>
+
       <!-- PROGRESS & MILESTONES -->
       <div class="detail-section progress-section" id="detail-progress-section">
         <div class="progress-section-header">

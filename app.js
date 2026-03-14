@@ -54,6 +54,79 @@ const DAILY_PERIOD = {
   getStart: () => startOfDayMs(new Date()),
 };
 
+// ─── RECURRING TASK HELPERS ───────────────────────────────────
+
+const DAY_NAMES_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+
+function isRecurringTask(task) {
+  return !!(task.recurrence && task.recurrence.type);
+}
+
+/**
+ * The plannedPeriod key a recurring task should live in.
+ */
+function getRecurrencePeriodKey(rec) {
+  if (!rec) return null;
+  switch (rec.type) {
+    case 'daily':   return 'oggi';
+    case 'weekly':  return 'questa_settimana';
+    case 'monthly': return 'questo_mese';
+    default: return null;
+  }
+}
+
+/**
+ * ISO "YYYY-MM-DD" of the START of the current recurrence period.
+ * Used to decide whether lastCompletedDate is "this period" or "a previous one".
+ */
+function getRecurrencePeriodStart(type) {
+  const now = new Date();
+  if (type === 'daily') {
+    return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  }
+  if (type === 'weekly') {
+    const d = new Date(now);
+    const day = d.getDay();
+    const daysToMon = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + daysToMon);
+    return toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
+  if (type === 'monthly') {
+    return toIso(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+  return null;
+}
+
+/**
+ * Whether the recurring task has already been completed during its current period.
+ */
+function isRecurringCompletedForPeriod(task) {
+  if (!task.completed || !task.lastCompletedDate) return false;
+  const periodStart = getRecurrencePeriodStart(task.recurrence.type);
+  if (!periodStart) return task.completed;
+  return task.lastCompletedDate >= periodStart;
+}
+
+/**
+ * Human-readable label for a recurrence config.
+ */
+function getRecurrenceLabel(rec) {
+  if (!rec || !rec.type) return '';
+  const days = (rec.days && rec.days.length > 0) ? [...rec.days].sort((a,b)=>a-b) : [];
+  if (rec.type === 'daily') {
+    if (days.length === 0 || days.length === 7) return 'Ogni giorno';
+    if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Giorni feriali';
+    if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Fine settimana';
+    return days.map(d => DAY_NAMES_SHORT[d]).join(', ');
+  }
+  if (rec.type === 'weekly') {
+    if (days.length === 0) return 'Ogni settimana';
+    return 'Ogni ' + days.map(d => DAY_NAMES_SHORT[d]).join('/');
+  }
+  if (rec.type === 'monthly') return 'Ogni mese';
+  return '';
+}
+
 // ─── LIST COLOR PALETTE ────────────────────────────────────────
 const LIST_COLORS = [
   { key: 'c1',  hex: '#FFF088', label: 'Giallo' },
@@ -134,6 +207,9 @@ function sortTasksBySchedule(tasks) {
  * Regular tasks just use the boolean field as-is.
  */
 function isDailyTaskEffectivelyCompleted(task) {
+  // New recurrence system
+  if (isRecurringTask(task)) return isRecurringCompletedForPeriod(task);
+  // Legacy ogni_giorno
   if (task.plannedPeriod !== 'ogni_giorno') return task.completed;
   const today = new Date();
   const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
@@ -146,12 +222,22 @@ function isDailyTaskEffectivelyCompleted(task) {
  */
 function buildCompleteUpdate(task, newCompleted) {
   const data = { completed: newCompleted };
-  // Track a timestamp for completions so we can filter "completed today".
   if (newCompleted) {
     data.completedAt = firebase.firestore.FieldValue.serverTimestamp();
   } else {
     data.completedAt = null;
   }
+  // All recurring tasks (new system) stamp lastCompletedDate
+  if (isRecurringTask(task)) {
+    if (newCompleted) {
+      const today = new Date();
+      data.lastCompletedDate = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    } else {
+      data.lastCompletedDate = null;
+    }
+    return data;
+  }
+  // Legacy ogni_giorno
   if (task.plannedPeriod === 'ogni_giorno') {
     if (newCompleted) {
       const today = new Date();
@@ -338,6 +424,30 @@ async function autoAdvanceOverdueTasks(listId) {
   let hasChanges = false;
 
   state.tasks.forEach(task => {
+    // ── New recurrence system: reset when the period rolls over ───
+    if (isRecurringTask(task)) {
+      if (task.completed) {
+        const periodStart = getRecurrencePeriodStart(task.recurrence.type);
+        const shouldReset = !task.lastCompletedDate || task.lastCompletedDate < periodStart;
+        if (shouldReset) {
+          // Also restore plannedPeriod in case it was auto-advanced as overdue
+          const correctPeriodKey = getRecurrencePeriodKey(task.recurrence);
+          const correctPeriod = correctPeriodKey ? getPeriod(correctPeriodKey) : null;
+          const reset = {
+            completed: false,
+            lastCompletedDate: null,
+            overdue: false,
+            plannedPeriod: correctPeriodKey || task.plannedPeriod,
+            plannedPeriodUntil: correctPeriod ? correctPeriod.getEnd() : task.plannedPeriodUntil,
+          };
+          batch.update(tasksRef(listId).doc(task.id), reset);
+          Object.assign(task, reset);
+          hasChanges = true;
+        }
+      }
+      return; // skip regular auto-advance logic for recurring tasks
+    }
+
     // ── Daily recurring: reset if completed on a previous day ──────
     if (task.plannedPeriod === 'ogni_giorno' && task.completed) {
       if (task.lastCompletedDate !== todayIso) {
@@ -598,6 +708,7 @@ async function addTask(name, periodKey, deadline) {
     plannedPeriod: periodKey || null,
     plannedPeriodUntil: until,
     overdue: false,
+    recurrence: null,
     milestones: defaultMs,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1086,6 +1197,7 @@ async function renderTimeline() {
             ${task.deadline ? `<span class="tl-deadline ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>` : ''}
             ${task.overdue  ? `<span class="tl-overdue-badge" ${overdueColor ? `style="color:${overdueColor};border-color:${overdueColor};background:${overdueColor}18"` : ''}>!</span>` : ''}
             ${task.plannedPeriod === 'ogni_giorno' ? '<span class="tl-daily-badge">↻</span>' : ''}
+            ${(() => { if (!isRecurringTask(task) || isCompletedToday(task)) return ''; const rk = getRecurrencePeriodKey(task.recurrence); const rp = rk ? getPeriod(rk) : null; const bc = rp ? rp.color : '#FF98A9'; const lb = getRecurrenceLabel(task.recurrence); return `<span class="task-recurrence-badge" style="color:${bc};border-color:${bc}50;background:${bc}18" title="${lb}">↻ ${lb}</span>`; })()}
             ${(() => { const ms = task.milestones; if (!ms || ms.length === 0 || isCompletedToday(task)) return ''; const doneCnt = ms.filter(m=>m.done).length; const pct = Math.round(doneCnt/ms.length*100); const tlList = state.lists.find(l=>l.id===task.listId); const lc = getListColorHex(tlList); const grad = lc ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)` : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)'; return `<span class="task-mini-progress" title="${pct}%"><span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span><span class="task-mini-progress-label">${doneCnt}/${ms.length}</span></span>`; })()}
           </div>
         </div>
@@ -1222,6 +1334,14 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
       >${bang}${period.label}</span>`);
     }
   }
+  // Recurrence badge (new system)
+  if (isRecurringTask(task) && !isDone) {
+    const recPeriodKey = getRecurrencePeriodKey(task.recurrence);
+    const recPeriod = recPeriodKey ? getPeriod(recPeriodKey) : null;
+    const badgeColor = recPeriod ? recPeriod.color : '#FF98A9';
+    const label = getRecurrenceLabel(task.recurrence);
+    parts.push(`<span class="task-recurrence-badge" style="color:${badgeColor};border-color:${badgeColor}50;background:${badgeColor}18" title="${label}">↻ ${label}</span>`);
+  }
   if (task.deadline && !isDone) {
     parts.push(`<span class="task-deadline-chip ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>`);
   }
@@ -1241,6 +1361,78 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
     </span>`);
   }
   return parts.length > 0 ? `<div class="task-meta">${parts.join('')}</div>` : '';
+}
+
+
+// ============================================================
+// RECURRENCE UI
+// ============================================================
+
+function renderRecurrenceUI(task) {
+  const typeEl  = document.getElementById('detail-recurrence-type');
+  const wrapEl  = document.getElementById('detail-recurrence-days-wrap');
+  const hintEl  = document.getElementById('detail-recurrence-hint');
+  const labelEl = document.getElementById('detail-recurrence-days-label');
+  if (!typeEl) return;
+
+  const rec = task.recurrence || null;
+  typeEl.value = rec ? rec.type : '';
+
+  // Show/hide the day-picker depending on type
+  const showDays = rec && (rec.type === 'daily' || rec.type === 'weekly');
+  if (wrapEl) wrapEl.classList.toggle('hidden', !showDays);
+
+  if (labelEl) {
+    labelEl.textContent = rec && rec.type === 'weekly' ? 'Il giorno' : 'Nei giorni';
+  }
+
+  // Mark active days
+  const activeDays = (rec && rec.days) ? rec.days : [];
+  document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
+    const d = parseInt(btn.dataset.day, 10);
+    btn.classList.toggle('active', activeDays.includes(d));
+  });
+
+  // Update hint label
+  if (hintEl) hintEl.textContent = rec ? getRecurrenceLabel(rec) : '';
+}
+
+function saveRecurrence() {
+  if (!state.activeTaskId) return;
+  const task = state.tasks.find(t => t.id === state.activeTaskId);
+  if (!task) return;
+
+  const typeEl = document.getElementById('detail-recurrence-type');
+  const type   = typeEl ? typeEl.value : '';
+
+  if (!type) {
+    // Remove recurrence — also clear the auto-managed plannedPeriod if it was set by recurrence
+    updateTask(state.activeTaskId, { recurrence: null });
+    return;
+  }
+
+  const days = [];
+  document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active').forEach(btn => {
+    days.push(parseInt(btn.dataset.day, 10));
+  });
+
+  const rec = { type, days };
+  const periodKey = getRecurrencePeriodKey(rec);
+  const period    = periodKey ? getPeriod(periodKey) : null;
+  const until     = period ? period.getEnd() : null;
+
+  updateTask(state.activeTaskId, {
+    recurrence:         rec,
+    plannedPeriod:      periodKey || task.plannedPeriod,
+    plannedPeriodUntil: until !== undefined ? until : task.plannedPeriodUntil,
+    completed:          false,
+    lastCompletedDate:  null,
+    overdue:            false,
+  });
+
+  // Refresh the hint
+  const hintEl = document.getElementById('detail-recurrence-hint');
+  if (hintEl) hintEl.textContent = getRecurrenceLabel(rec);
 }
 
 
@@ -1285,6 +1477,7 @@ function openDetailPanel(taskId) {
   el.detailPanel.classList.add('open');
   el.overlay.classList.remove('hidden');
   renderMilestones(task, listColorHex);
+  renderRecurrenceUI(task);
 }
 
 function updateDeadlineStatus(isoStr) {
@@ -1614,6 +1807,39 @@ function bindEvents() {
     const until = p ? p.getEnd() : null;
     el.detailOverdueBar.classList.add('hidden');
     updateTask(state.activeTaskId, { plannedPeriod: key, plannedPeriodUntil: until, overdue: false });
+  });
+
+  // ── Recurrence type select ───────────────────────────────────
+  const recTypeEl = document.getElementById('detail-recurrence-type');
+  if (recTypeEl) {
+    recTypeEl.addEventListener('change', () => {
+      const task = state.activeTaskId ? state.tasks.find(t => t.id === state.activeTaskId) : null;
+      const wrapEl  = document.getElementById('detail-recurrence-days-wrap');
+      const labelEl = document.getElementById('detail-recurrence-days-label');
+      const type    = recTypeEl.value;
+      const showDays = type === 'daily' || type === 'weekly';
+      if (wrapEl) wrapEl.classList.toggle('hidden', !showDays);
+      if (labelEl) labelEl.textContent = type === 'weekly' ? 'Il giorno' : 'Nei giorni';
+      // Reset day selections when type changes
+      document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => btn.classList.remove('active'));
+      saveRecurrence();
+    });
+  }
+
+  // ── Recurrence day buttons ───────────────────────────────────
+  document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = recTypeEl ? recTypeEl.value : '';
+      if (type === 'weekly') {
+        // Single-select for weekly
+        document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      } else {
+        // Multi-select for daily custom
+        btn.classList.toggle('active');
+      }
+      saveRecurrence();
+    });
   });
 
   // Timeline: re-render when "show completed" toggle changes
