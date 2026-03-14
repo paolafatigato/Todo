@@ -21,7 +21,11 @@
   <aside id="sidebar">
     <div id="sidebar-header">
       <span class="logo">✦ Todo</span>
+      <span class="sidebar-title-mobile">Le mie liste</span>
       <button id="btn-new-list" title="Nuova lista">+</button>
+    </div>
+    <div id="sidebar-search-wrap">
+      <input id="sidebar-search" type="text" placeholder="Cerca lista…" autocomplete="off" />
     </div>
     <ul id="lists-nav" role="list"></ul>
     <div id="sidebar-footer">
@@ -60,6 +64,7 @@
             <option value="nome">🔤 Nome</option>
           </select>
           <button id="btn-star" title="Segna come preferita">☆</button>
+          <button id="btn-list-settings" title="Impostazioni lista">⚙</button>
           <button id="btn-delete-list" title="Elimina lista">🗑</button>
         </div>
         <div id="add-task-row">
@@ -80,7 +85,7 @@
       <header id="timeline-header">
         <h1>Agenda</h1>
         <div class="timeline-header-right">
-          <button id="btn-timeline-quick-add" title="Aggiungi task urgente">⚡ Urgente</button>
+          <button id="btn-timeline-quick-add" title="Aggiungi task urgente">⚡</button>
           <label class="toggle-completed-label">
             <input type="checkbox" id="toggle-show-completed" />
             Mostra completati
@@ -172,7 +177,10 @@
 
       <!-- PROGRESS & MILESTONES -->
       <div class="detail-section progress-section" id="detail-progress-section">
-        <div class="detail-section-title">Avanzamento</div>
+        <div class="progress-section-header">
+          <div class="detail-section-title">Avanzamento</div>
+          <button id="btn-apply-default-ms" class="hidden" title="Inserisci tappe predefinite della lista">⊕ Tappe lista</button>
+        </div>
         <div class="progress-bar-row">
           <div class="progress-bar-track">
             <div class="progress-bar-fill" id="detail-progress-fill"></div>
@@ -213,6 +221,41 @@
       <div id="modal-actions">
         <button id="btn-modal-cancel">Annulla</button>
         <button id="btn-modal-create">Crea</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIST SETTINGS MODAL -->
+  <div id="list-settings-backdrop" class="hidden">
+    <div id="list-settings-modal">
+      <div class="lsm-header">
+        <h3>Impostazioni lista</h3>
+        <button id="btn-lsm-close">✕</button>
+      </div>
+
+      <div class="lsm-field">
+        <label for="lsm-name">Nome</label>
+        <input id="lsm-name" type="text" placeholder="Nome lista…" autocomplete="off" />
+      </div>
+
+      <div class="lsm-field">
+        <label>Colore</label>
+        <div id="lsm-color-swatches" class="lsm-swatches"></div>
+      </div>
+
+      <div class="lsm-field">
+        <label>Tappe predefinite per i nuovi task</label>
+        <div id="lsm-milestones-list" class="lsm-milestones"></div>
+        <div class="lsm-add-ms-row">
+          <input id="lsm-ms-input" type="text" placeholder="Nuova tappa predefinita…" autocomplete="off" />
+          <button id="btn-lsm-add-ms">+</button>
+        </div>
+        <p class="lsm-hint">I nuovi task in questa lista partiranno con queste tappe già impostate.</p>
+      </div>
+
+      <div class="lsm-actions">
+        <button id="btn-lsm-cancel">Annulla</button>
+        <button id="btn-lsm-save">Salva</button>
       </div>
     </div>
   </div>

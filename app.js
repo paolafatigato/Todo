@@ -54,6 +54,29 @@ const DAILY_PERIOD = {
   getStart: () => startOfDayMs(new Date()),
 };
 
+// ─── LIST COLOR PALETTE ────────────────────────────────────────
+const LIST_COLORS = [
+  { key: 'c1',  hex: '#FFF088', label: 'Giallo' },
+  { key: 'c2',  hex: '#5C946E', label: 'Verde' },
+  { key: 'c3',  hex: '#A1BEF8', label: 'Azzurro' },
+  { key: 'c4',  hex: '#6F8FE3', label: 'Blu chiaro' },
+  { key: 'c5',  hex: '#3548C0', label: 'Blu' },
+  { key: 'c6',  hex: '#7C6ED8', label: 'Indaco' },
+  { key: 'c7',  hex: '#B285EC', label: 'Lilla' },
+  { key: 'c8',  hex: '#C873D4', label: 'Orchidea' },
+  { key: 'c9',  hex: '#DB5ABA', label: 'Rosa scuro' },
+  { key: 'c10', hex: '#E96FAF', label: 'Rosa' },
+  { key: 'c11', hex: '#FF98A9', label: 'Rosa chiaro' },
+  { key: 'c12', hex: '#F36B7E', label: 'Salmone' },
+  { key: 'c15', hex: '#FF0022', label: 'Rosso' },
+];
+
+function getListColorHex(list) {
+  if (!list || !list.color) return null;
+  const found = LIST_COLORS.find(c => c.key === list.color);
+  return found ? found.hex : null;
+}
+
 const getPeriod = key => {
   if (key === 'ogni_giorno') return DAILY_PERIOD;
   return PERIODS.find(p => p.key === key) || null;
@@ -460,6 +483,7 @@ const el = {
   detailMilestones:     document.getElementById('detail-milestones'),
   addMilestoneInput:    document.getElementById('add-milestone-input'),
   btnAddMilestone:      document.getElementById('btn-add-milestone'),
+  btnApplyDefaultMs:    document.getElementById('btn-apply-default-ms'),
   // Timeline quick-add
   btnTimelineQuickAdd:  document.getElementById('btn-timeline-quick-add'),
   tlQuickAddBar:        document.getElementById('timeline-quick-add-bar'),
@@ -468,6 +492,20 @@ const el = {
   tlTaskPeriodSel:      document.getElementById('tl-task-period-sel'),
   btnTlAdd:             document.getElementById('btn-tl-add'),
   btnTlCancel:          document.getElementById('btn-tl-cancel'),
+  // Sidebar search
+  sidebarSearch:        document.getElementById('sidebar-search'),
+  // List settings button
+  btnListSettings:      document.getElementById('btn-list-settings'),
+  // List settings modal
+  listSettingsBackdrop: document.getElementById('list-settings-backdrop'),
+  lsmName:              document.getElementById('lsm-name'),
+  lsmColorSwatches:     document.getElementById('lsm-color-swatches'),
+  lsmMilestonesList:    document.getElementById('lsm-milestones-list'),
+  lsmMsInput:           document.getElementById('lsm-ms-input'),
+  btnLsmAddMs:          document.getElementById('btn-lsm-add-ms'),
+  btnLsmClose:          document.getElementById('btn-lsm-close'),
+  btnLsmCancel:         document.getElementById('btn-lsm-cancel'),
+  btnLsmSave:           document.getElementById('btn-lsm-save'),
 };
 
 
@@ -547,12 +585,18 @@ async function addTask(name, periodKey, deadline) {
   if (!state.activeListId || !name.trim()) return;
   const p     = periodKey ? getPeriod(periodKey) : null;
   const until = p ? p.getEnd() : null;
+  // Inherit default milestones from the list definition
+  const list = state.lists.find(l => l.id === state.activeListId);
+  const defaultMs = (list && list.defaultMilestones)
+    ? list.defaultMilestones.map(name => ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), name, done: false }))
+    : [];
   await tasksRef(state.activeListId).add({
     name: name.trim(), completed: false, notes: '', order: state.tasks.length,
     deadline: deadline || null,
     plannedPeriod: periodKey || null,
     plannedPeriodUntil: until,
     overdue: false,
+    milestones: defaultMs,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
@@ -582,15 +626,20 @@ function computeProgress(milestones) {
   return Math.round(milestones.filter(m => m.done).length / milestones.length * 100);
 }
 
-function renderMilestones(task) {
+function renderMilestones(task, listColorHex) {
   if (!el.detailMilestones || !el.detailProgressFill) return;
   const milestones = task.milestones || [];
   const pct = computeProgress(milestones);
 
-  // Update progress bar
+  // Update progress bar fill with list color gradient
   const fill = pct !== null ? pct : 0;
   el.detailProgressFill.style.width = fill + '%';
   el.detailProgressPct.textContent = pct !== null ? pct + '%' : '';
+  if (listColorHex) {
+    el.detailProgressFill.style.background = `linear-gradient(90deg, ${listColorHex} 0%, #FF98A9 100%)`;
+  } else {
+    el.detailProgressFill.style.background = '';
+  }
 
   // Render milestone rows
   el.detailMilestones.innerHTML = '';
@@ -621,7 +670,8 @@ async function addMilestone(task, name) {
   }];
   await updateTask(task.id, { milestones });
   task.milestones = milestones;
-  renderMilestones(task);
+  const list = state.lists.find(l => l.id === state.activeListId);
+  renderMilestones(task, getListColorHex(list));
 }
 
 async function toggleMilestone(task, idx) {
@@ -630,14 +680,16 @@ async function toggleMilestone(task, idx) {
   );
   await updateTask(task.id, { milestones });
   task.milestones = milestones;
-  renderMilestones(task);
+  const list = state.lists.find(l => l.id === state.activeListId);
+  renderMilestones(task, getListColorHex(list));
 }
 
 async function deleteMilestone(task, idx) {
   const milestones = (task.milestones || []).filter((_, i) => i !== idx);
   await updateTask(task.id, { milestones });
   task.milestones = milestones;
-  renderMilestones(task);
+  const list = state.lists.find(l => l.id === state.activeListId);
+  renderMilestones(task, getListColorHex(list));
 }
 
 
@@ -735,6 +787,16 @@ function openList(listId, pendingTaskId) {
   el.listView.classList.remove('hidden');
   el.listTitleInput.value = list.name;
   updateStarButton(list.starred);
+
+  // Apply list accent color to the header border
+  const colorHex = getListColorHex(list);
+  const listHeader = document.getElementById('list-header');
+  if (listHeader) {
+    listHeader.style.borderBottomColor = colorHex || '';
+    listHeader.style.setProperty('--list-accent', colorHex || 'var(--blue)');
+  }
+  el.listTitleInput.style.color = colorHex || '';
+
   if (!pendingTaskId) closeDetailPanel();
   listenTasks(listId);
   renderSidebar();
@@ -751,21 +813,34 @@ function updateStarButton(isStarred) {
 // ============================================================
 
 function renderSidebar() {
+  const query = (el.sidebarSearch?.value || '').trim().toLowerCase();
   el.listsNav.innerHTML = '';
-  state.lists.forEach(list => {
+  const filtered = query
+    ? state.lists.filter(l => (l.name || '').toLowerCase().includes(query))
+    : state.lists;
+
+  filtered.forEach(list => {
     const li = document.createElement('li');
     li.className = 'nav-item' + (list.id === state.activeListId ? ' active' : '');
     li.dataset.id = list.id;
-    li.draggable = true;
+    li.draggable = !query;
     li.innerHTML = `
-      <span class="nav-drag-handle">⠿</span>
+      ${!query ? '<span class="nav-drag-handle">⠿</span>' : ''}
       <span class="nav-item-name">${escapeHtml(list.name)}</span>
       <span class="nav-item-star ${list.starred ? 'starred' : ''}">${list.starred ? '★' : ''}</span>
     `;
     li.addEventListener('click', () => openList(list.id));
     el.listsNav.appendChild(li);
   });
-  bindSidebarDragDrop();
+
+  if (filtered.length === 0 && query) {
+    const empty = document.createElement('li');
+    empty.className = 'nav-item-empty';
+    empty.textContent = 'Nessuna lista trovata';
+    el.listsNav.appendChild(empty);
+  }
+
+  if (!query) bindSidebarDragDrop();
 }
 
 
@@ -792,9 +867,11 @@ function renderHomepage() {
   }
 
   state.lists.forEach(list => {
+    const colorHex = getListColorHex(list);
     const card = document.createElement('div');
     card.className = 'home-card';
     card.dataset.listId = list.id;
+    if (colorHex) card.style.borderLeftColor = colorHex;
     card.innerHTML = `
       <div class="home-card-top">
         <div class="home-card-info">
@@ -987,6 +1064,7 @@ async function renderTimeline() {
             ${task.deadline ? `<span class="tl-deadline ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>` : ''}
             ${task.overdue  ? '<span class="tl-overdue-badge">!</span>' : ''}
             ${task.plannedPeriod === 'ogni_giorno' ? '<span class="tl-daily-badge">↻</span>' : ''}
+            ${(() => { const ms = task.milestones; if (!ms || ms.length === 0 || isCompletedToday(task)) return ''; const doneCnt = ms.filter(m=>m.done).length; const pct = Math.round(doneCnt/ms.length*100); const tlList = state.lists.find(l=>l.id===task.listId); const lc = getListColorHex(tlList); const grad = lc ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)` : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)'; return `<span class="task-mini-progress" title="${pct}%"><span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span><span class="task-mini-progress-label">${doneCnt}/${ms.length}</span></span>`; })()}
           </div>
         </div>
       `;
@@ -1125,6 +1203,21 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
   if (task.deadline && !isDone) {
     parts.push(`<span class="task-deadline-chip ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>`);
   }
+  // Mini progress bar if milestones exist
+  const ms = task.milestones;
+  if (ms && ms.length > 0 && !isDone) {
+    const doneCnt = ms.filter(m => m.done).length;
+    const pct = Math.round(doneCnt / ms.length * 100);
+    const list = state.lists.find(l => l.id === state.activeListId);
+    const lc = getListColorHex(list);
+    const grad = lc
+      ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)`
+      : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)';
+    parts.push(`<span class="task-mini-progress" title="${pct}% completato">
+      <span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span>
+      <span class="task-mini-progress-label">${doneCnt}/${ms.length}</span>
+    </span>`);
+  }
   return parts.length > 0 ? `<div class="task-meta">${parts.join('')}</div>` : '';
 }
 
@@ -1155,10 +1248,21 @@ function openDetailPanel(taskId) {
     el.detailOverdueBar.classList.add('hidden');
   }
 
+  // Show/hide "apply list defaults" button
+  const list = state.lists.find(l => l.id === state.activeListId);
+  const listColorHex = getListColorHex(list);
+  const hasDefaults = list && list.defaultMilestones && list.defaultMilestones.length > 0;
+  if (el.btnApplyDefaultMs) {
+    el.btnApplyDefaultMs.classList.toggle('hidden', !hasDefaults);
+    if (hasDefaults) {
+      el.btnApplyDefaultMs.textContent = `⊕ Tappe lista (${list.defaultMilestones.length})`;
+    }
+  }
+
   el.detailPanel.classList.remove('hidden');
   el.detailPanel.classList.add('open');
   el.overlay.classList.remove('hidden');
-  renderMilestones(task);
+  renderMilestones(task, listColorHex);
 }
 
 function updateDeadlineStatus(isoStr) {
@@ -1199,6 +1303,90 @@ async function handleCreateList() {
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
   openList(docRef.id);
+}
+
+
+// ============================================================
+// LIST SETTINGS MODAL
+// ============================================================
+
+let lsmTempMilestones = []; // working copy while modal is open
+
+function openListSettings() {
+  const list = state.lists.find(l => l.id === state.activeListId);
+  if (!list) return;
+
+  el.lsmName.value = list.name || '';
+  lsmTempMilestones = [...(list.defaultMilestones || [])];
+
+  // Build color swatches
+  el.lsmColorSwatches.innerHTML = '';
+  LIST_COLORS.forEach(c => {
+    const sw = document.createElement('button');
+    sw.className = 'lsm-swatch' + (list.color === c.key ? ' selected' : '');
+    sw.style.background = c.hex;
+    sw.dataset.colorKey = c.key;
+    sw.title = c.label;
+    if (c.key === 'c1') sw.style.border = '2px solid #ccc'; // yellow needs contrast
+    sw.addEventListener('click', () => {
+      el.lsmColorSwatches.querySelectorAll('.lsm-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+    });
+    el.lsmColorSwatches.appendChild(sw);
+  });
+  // Add "no color" option
+  const noColor = document.createElement('button');
+  noColor.className = 'lsm-swatch lsm-swatch--none' + (!list.color ? ' selected' : '');
+  noColor.dataset.colorKey = '';
+  noColor.title = 'Nessun colore';
+  noColor.innerHTML = '✕';
+  noColor.addEventListener('click', () => {
+    el.lsmColorSwatches.querySelectorAll('.lsm-swatch').forEach(s => s.classList.remove('selected'));
+    noColor.classList.add('selected');
+  });
+  el.lsmColorSwatches.insertBefore(noColor, el.lsmColorSwatches.firstChild);
+
+  renderLsmMilestones();
+  el.listSettingsBackdrop.classList.remove('hidden');
+  setTimeout(() => el.lsmName.focus(), 50);
+}
+
+function closeListSettings() {
+  el.listSettingsBackdrop.classList.add('hidden');
+}
+
+function renderLsmMilestones() {
+  el.lsmMilestonesList.innerHTML = '';
+  lsmTempMilestones.forEach((name, idx) => {
+    const row = document.createElement('div');
+    row.className = 'lsm-ms-row';
+    row.innerHTML = `
+      <span class="lsm-ms-dot"></span>
+      <span class="lsm-ms-name">${escapeHtml(name)}</span>
+      <button class="lsm-ms-delete" data-idx="${idx}" title="Rimuovi">✕</button>
+    `;
+    row.querySelector('.lsm-ms-delete').addEventListener('click', () => {
+      lsmTempMilestones.splice(idx, 1);
+      renderLsmMilestones();
+    });
+    el.lsmMilestonesList.appendChild(row);
+  });
+}
+
+async function saveListSettings() {
+  const name = el.lsmName.value.trim();
+  if (!name) return;
+  const selectedSwatch = el.lsmColorSwatches.querySelector('.lsm-swatch.selected');
+  const colorKey = selectedSwatch ? selectedSwatch.dataset.colorKey : '';
+  const updates = {
+    name,
+    color: colorKey || null,
+    defaultMilestones: [...lsmTempMilestones],
+  };
+  await updateList(state.activeListId, updates);
+  // Also update the title input live
+  el.listTitleInput.value = name;
+  closeListSettings();
 }
 
 
@@ -1487,6 +1675,25 @@ function bindEvents() {
     });
   }
 
+  // Apply list default milestones to current task
+  if (el.btnApplyDefaultMs) {
+    el.btnApplyDefaultMs.addEventListener('click', async () => {
+      if (!state.activeTaskId) return;
+      const task = state.tasks.find(t => t.id === state.activeTaskId);
+      const list = state.lists.find(l => l.id === state.activeListId);
+      if (!task || !list || !list.defaultMilestones || !list.defaultMilestones.length) return;
+      // Merge: add defaults that don't already exist (by name)
+      const existing = new Set((task.milestones || []).map(m => m.name.toLowerCase()));
+      const toAdd = list.defaultMilestones
+        .filter(name => !existing.has(name.toLowerCase()))
+        .map(name => ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), name, done: false }));
+      const milestones = [...(task.milestones || []), ...toAdd];
+      await updateTask(task.id, { milestones });
+      task.milestones = milestones;
+      renderMilestones(task, getListColorHex(list));
+    });
+  }
+
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (!el.modalBackdrop.classList.contains('hidden')) hideModal();
@@ -1499,6 +1706,42 @@ function bindEvents() {
   if (el.btnLogoutMobile) el.btnLogoutMobile.addEventListener('click', logoutUser);
   if (el.btnLoginMobile)  el.btnLoginMobile.addEventListener('click', loginWithGoogle);
   if (el.btnOverlayLogin) el.btnOverlayLogin.addEventListener('click', loginWithGoogle);
+
+  // ── Sidebar search ───────────────────────────────────────────
+  if (el.sidebarSearch) {
+    el.sidebarSearch.addEventListener('input', renderSidebar);
+    el.sidebarSearch.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { el.sidebarSearch.value = ''; renderSidebar(); }
+    });
+  }
+
+  // ── List settings ────────────────────────────────────────────
+  if (el.btnListSettings) {
+    el.btnListSettings.addEventListener('click', openListSettings);
+  }
+  if (el.btnLsmClose)  el.btnLsmClose.addEventListener('click', closeListSettings);
+  if (el.btnLsmCancel) el.btnLsmCancel.addEventListener('click', closeListSettings);
+  if (el.btnLsmSave)   el.btnLsmSave.addEventListener('click', saveListSettings);
+  if (el.listSettingsBackdrop) {
+    el.listSettingsBackdrop.addEventListener('click', e => {
+      if (e.target === el.listSettingsBackdrop) closeListSettings();
+    });
+  }
+  if (el.btnLsmAddMs) {
+    el.btnLsmAddMs.addEventListener('click', () => {
+      const v = el.lsmMsInput.value.trim();
+      if (!v) return;
+      lsmTempMilestones.push(v);
+      renderLsmMilestones();
+      el.lsmMsInput.value = '';
+      el.lsmMsInput.focus();
+    });
+  }
+  if (el.lsmMsInput) {
+    el.lsmMsInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') el.btnLsmAddMs.click();
+    });
+  }
 }
 
 

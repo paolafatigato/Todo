@@ -2467,3 +2467,495 @@ body {
 }
 
 #btn-add-milestone:hover { background: #2a3aa8; transform: scale(1.08); }
+
+/* ============================================================
+   SIDEBAR — search bar
+   ============================================================ */
+
+#sidebar-search-wrap {
+  padding: 6px 10px 4px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+#sidebar-search {
+  width: 100%;
+  padding: 7px 12px 7px 30px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  color: rgba(255,255,255,0.9);
+  font-size: 0.82rem;
+  outline: none;
+  transition: background var(--t), border-color var(--t);
+}
+
+#sidebar-search::placeholder {
+  color: rgba(255,255,255,0.4);
+}
+
+#sidebar-search:focus {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,240,136,0.4);
+  color: #fff;
+}
+
+#sidebar-search-wrap::before {
+  content: '🔍';
+  position: absolute;
+  left: 19px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7rem;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.nav-item-color-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-item-empty {
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.35);
+  font-style: italic;
+}
+
+/* Mobile: hide search (sidebar is horizontal on mobile) */
+@media (max-width: 700px) {
+  #sidebar-search-wrap { display: none; }
+}
+
+
+/* ============================================================
+   TIMELINE — urgent button (icon-only, round)
+   ============================================================ */
+
+#btn-timeline-quick-add {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.1rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================
+   TASK MINI PROGRESS BAR (in task list + timeline)
+   ============================================================ */
+
+.task-mini-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  vertical-align: middle;
+  max-width: 120px;
+  flex-shrink: 0;
+}
+
+.task-mini-progress-fill {
+  display: block;
+  height: 4px;
+  min-width: 4px;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%);
+  border-radius: 4px;
+  transition: width 300ms ease;
+  flex-shrink: 0;
+}
+
+/* The track behind the fill */
+.task-mini-progress {
+  position: relative;
+  background: var(--border);
+  border-radius: 4px;
+  height: 4px;
+  width: 60px;
+  overflow: visible;
+}
+
+.task-mini-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%);
+  border-radius: 4px;
+  transition: width 300ms ease;
+}
+
+.task-mini-progress-label {
+  position: absolute;
+  right: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+/* Adjust task-meta to make room for label overflow */
+.task-meta {
+  overflow: visible;
+  padding-right: 32px;
+}
+
+
+/* ============================================================
+   LIST SETTINGS MODAL
+   ============================================================ */
+
+#list-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,31,75,0.55);
+  z-index: 300;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+#list-settings-backdrop.hidden { display: none !important; }
+
+#list-settings-modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 28px 28px 24px;
+  width: min(480px, 94vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: popIn 220ms cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+.lsm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lsm-header h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.2rem;
+  color: var(--blue);
+}
+
+#btn-lsm-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t), color var(--t);
+  border: 1px solid var(--border);
+}
+#btn-lsm-close:hover { background: var(--border); color: var(--text-primary); }
+
+.lsm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lsm-field > label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+#lsm-name {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  font-size: 1rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--blue);
+  transition: border-color var(--t);
+  background: var(--bg);
+}
+#lsm-name:focus { border-color: var(--blue); background: #fff; }
+
+/* Color swatches grid */
+.lsm-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.lsm-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2.5px solid transparent;
+  transition: transform var(--t), border-color var(--t), box-shadow var(--t);
+  flex-shrink: 0;
+  position: relative;
+  outline: none;
+}
+
+.lsm-swatch:hover { transform: scale(1.15); }
+
+.lsm-swatch.selected {
+  border-color: var(--text-primary) !important;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text-primary);
+  transform: scale(1.1);
+}
+
+.lsm-swatch--none {
+  background: var(--bg) !important;
+  border: 1.5px solid var(--border) !important;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lsm-swatch--none.selected {
+  border-color: var(--text-muted) !important;
+  box-shadow: none;
+}
+
+/* Default milestones list */
+.lsm-milestones {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lsm-ms-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.lsm-ms-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.lsm-ms-name {
+  flex: 1;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.lsm-ms-delete {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color var(--t), background var(--t);
+  opacity: 0;
+}
+.lsm-ms-row:hover .lsm-ms-delete { opacity: 1; }
+.lsm-ms-delete:hover { background: var(--border); color: var(--danger); }
+
+.lsm-add-ms-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#lsm-ms-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--t);
+}
+#lsm-ms-input:focus { border-color: var(--blue); }
+
+#btn-lsm-add-ms {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--t), transform var(--t);
+}
+#btn-lsm-add-ms:hover { background: #2a3aa8; transform: scale(1.08); }
+
+.lsm-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  padding: 2px 0;
+}
+
+.lsm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+#btn-lsm-cancel {
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  background: var(--bg);
+  font-weight: 500;
+  font-size: 0.88rem;
+  transition: background var(--t);
+}
+#btn-lsm-cancel:hover { background: var(--border); }
+
+#btn-lsm-save {
+  padding: 9px 22px;
+  border-radius: var(--radius);
+  background: var(--blue);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.88rem;
+  transition: background var(--t), transform var(--t);
+}
+#btn-lsm-save:hover { background: #2a3aa8; transform: translateY(-1px); }
+
+/* Settings button in list header */
+#btn-list-settings {
+  font-size: 1rem;
+  padding: 4px 7px;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  transition: color var(--t), transform var(--t);
+}
+#btn-list-settings:hover {
+  color: var(--blue);
+  transform: rotate(30deg);
+}
+
+/* List header uses a CSS var for the accent color set by JS */
+#list-header {
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: var(--list-accent, var(--border));
+  transition: border-bottom-color 300ms ease;
+}
+
+/* ============================================================
+   SIDEBAR MOBILE — "Le mie liste" title
+   ============================================================ */
+
+.sidebar-title-mobile {
+  display: none;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--yellow);
+  flex: 1;
+  padding-left: 8px;
+}
+
+@media (max-width: 700px) {
+  .sidebar-title-mobile { display: block; }
+  /* Hide the logo mark on mobile to give room to the title */
+  .logo { display: none; }
+  /* Show the search wrap on mobile as a separate full-width row */
+  #sidebar-search-wrap {
+    display: flex;
+    width: 100%;
+    order: 99; /* after everything in flex row */
+    padding: 6px 12px 8px;
+  }
+  /* Make the sidebar a grid so the search can span below */
+  #sidebar {
+    flex-direction: column;
+  }
+  #sidebar-header {
+    width: 100%;
+  }
+  #sidebar-search-wrap {
+    display: block;
+  }
+}
+
+/* ============================================================
+   URGENT BUTTON — blue base with red gradient hint
+   ============================================================ */
+
+#btn-timeline-quick-add {
+  background: linear-gradient(135deg, var(--blue) 40%, #CE2D4F 100%) !important;
+  box-shadow: 0 2px 10px rgba(53,72,192,0.35) !important;
+  color: #fff !important;
+}
+
+#btn-timeline-quick-add:hover {
+  box-shadow: 0 4px 16px rgba(53,72,192,0.5) !important;
+  transform: translateY(-1px) scale(1.05);
+}
+
+/* ============================================================
+   PROGRESS SECTION HEADER — title + apply-defaults button row
+   ============================================================ */
+
+.progress-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+#btn-apply-default-ms {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--blue);
+  color: #fff;
+  letter-spacing: 0.02em;
+  border: none;
+  transition: background var(--t), transform var(--t);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#btn-apply-default-ms:hover {
+  background: #2a3aa8;
+  transform: translateY(-1px);
+}
