@@ -15,7 +15,11 @@
 
 const db = firebase.firestore();
 
-
+db.enablePersistence({ synchronizeTabs: true })
+  .catch(err => {
+    if (err.code === 'failed-precondition') console.warn('Persistenza non attiva: più tab aperte');
+    if (err.code === 'unimplemented') console.warn('Browser non supportato');
+  });
 // ============================================================
 // PERIODS
 // ============================================================
