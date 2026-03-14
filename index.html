@@ -77,8 +77,47 @@
             <select id="task-period-quick" title="Quando penso di farlo"></select>
             <input id="task-deadline-quick" type="date" title="Data di inizio" />
             <button id="btn-clear-deadline-quick" class="btn-clear-dl-quick" title="Rimuovi scadenza">✕</button>
+            <button id="btn-quick-recurrence" class="btn-quick-recurrence" title="Imposta ricorrenza">↻</button>
           </div>
           <button id="btn-add-task">+</button>
+          <!-- Quick-recurrence popover — anchored to this row -->
+          <div id="quick-recurrence-popover" class="hidden">
+            <div class="qrp-types">
+              <button class="qrp-type-btn active" data-type="">Mai</button>
+              <button class="qrp-type-btn" data-type="daily">Ogni giorno</button>
+              <button class="qrp-type-btn" data-type="weekly">Ogni settimana</button>
+              <button class="qrp-type-btn" data-type="monthly">Ogni mese</button>
+              <button class="qrp-type-btn" data-type="yearly">Ogni anno</button>
+              <button class="qrp-type-btn" data-type="custom">Personalizza</button>
+            </div>
+            <div id="qrp-sub-weekly" class="qrp-sub hidden">
+              <div class="qrp-sub-label">Escludi giorni (clicca per deselezionare)</div>
+              <div class="recurrence-day-picker" id="qrp-days-weekly"></div>
+            </div>
+            <div id="qrp-sub-monthly" class="qrp-sub hidden">
+              <div class="qrp-sub-label">Giorno del mese</div>
+              <input type="number" id="qrp-monthly-day" min="1" max="31" placeholder="es. 15" />
+            </div>
+            <div id="qrp-sub-yearly" class="qrp-sub hidden">
+              <div class="qrp-sub-label">Data dell'anno (gg/mm)</div>
+              <div class="qrp-yearly-row">
+                <input type="number" id="qrp-yearly-day" min="1" max="31" placeholder="Giorno" />
+                <select id="qrp-yearly-month">
+                  <option value="0">Gennaio</option><option value="1">Febbraio</option>
+                  <option value="2">Marzo</option><option value="3">Aprile</option>
+                  <option value="4">Maggio</option><option value="5">Giugno</option>
+                  <option value="6">Luglio</option><option value="7">Agosto</option>
+                  <option value="8">Settembre</option><option value="9">Ottobre</option>
+                  <option value="10">Novembre</option><option value="11">Dicembre</option>
+                </select>
+              </div>
+            </div>
+            <div id="qrp-sub-custom" class="qrp-sub hidden">
+              <div class="qrp-sub-label">Giorni della settimana</div>
+              <div class="recurrence-day-picker" id="qrp-days-custom"></div>
+            </div>
+            <div id="qrp-summary" class="qrp-summary"></div>
+          </div>
         </div>
       </header>
       <ul id="task-list" role="list"></ul>
@@ -189,6 +228,8 @@
             <option value="daily">Ogni giorno</option>
             <option value="weekly">Ogni settimana</option>
             <option value="monthly">Ogni mese</option>
+            <option value="yearly">Ogni anno</option>
+            <option value="custom">Personalizza</option>
           </select>
         </div>
         <div class="planning-field recurrence-days-wrap hidden" id="detail-recurrence-days-wrap">
@@ -203,6 +244,24 @@
             <button type="button" class="recurrence-day-btn" data-day="0">Dom</button>
           </div>
           <span class="recurrence-days-hint" id="detail-recurrence-hint"></span>
+        </div>
+        <div class="planning-field hidden" id="detail-recurrence-monthly-wrap">
+          <label for="detail-recurrence-monthly-day">Giorno del mese</label>
+          <input type="number" id="detail-recurrence-monthly-day" min="1" max="31" placeholder="es. 15" />
+        </div>
+        <div class="planning-field hidden" id="detail-recurrence-yearly-wrap">
+          <label>Data dell'anno</label>
+          <div class="qrp-yearly-row">
+            <input type="number" id="detail-recurrence-yearly-day" min="1" max="31" placeholder="Giorno" />
+            <select id="detail-recurrence-yearly-month">
+              <option value="0">Gennaio</option><option value="1">Febbraio</option>
+              <option value="2">Marzo</option><option value="3">Aprile</option>
+              <option value="4">Maggio</option><option value="5">Giugno</option>
+              <option value="6">Luglio</option><option value="7">Agosto</option>
+              <option value="8">Settembre</option><option value="9">Ottobre</option>
+              <option value="10">Novembre</option><option value="11">Dicembre</option>
+            </select>
+          </div>
         </div>
       </div>
 

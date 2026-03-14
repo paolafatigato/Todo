@@ -56,43 +56,170 @@ const DAILY_PERIOD = {
 
 // ─── RECURRING TASK HELPERS ───────────────────────────────────
 
-const DAY_NAMES_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+const DAY_NAMES_SHORT  = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+const MONTHS_IT_SHORT  = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const MONTHS_IT_FULL   = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                           'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+/**
+ * Fixed badge color per recurrence type — never changes regardless of period slot.
+ * weekly  → c11 (rosa chiaro)
+ * monthly → c6  (indaco)
+ * yearly  → c3  (azzurro)
+ * daily / custom → c15 (rosso)
+ */
+function getRecurrenceColor(type) {
+  switch (type) {
+    case 'weekly':  return cssVar('--c11', '#FF98A9');
+    case 'monthly': return cssVar('--c6',  '#7C6ED8');
+    case 'yearly':  return cssVar('--c3',  '#A1BEF8');
+    default:        return cssVar('--c15', '#FF0022'); // daily / custom
+  }
+}
 
 function isRecurringTask(task) {
   return !!(task.recurrence && task.recurrence.type);
 }
 
 /**
- * The plannedPeriod key a recurring task should live in.
+ * For "weekly" type, rec.days = INCLUDED weekdays (0=Sun…6=Sat).
+ * Empty array means ALL 7 days.
+ * Returns true if `dayOfWeek` is a scheduled day.
  */
-function getRecurrencePeriodKey(rec) {
-  if (!rec) return null;
-  switch (rec.type) {
-    case 'daily':   return 'oggi';
-    case 'weekly':  return 'questa_settimana';
-    case 'monthly': return 'questo_mese';
-    default: return null;
-  }
+function isScheduledWeeklyDay(rec, dayOfWeek) {
+  if (!rec.days || rec.days.length === 0) return true; // all days
+  return rec.days.includes(dayOfWeek);
 }
 
 /**
- * ISO "YYYY-MM-DD" of the START of the current recurrence period.
- * Used to decide whether lastCompletedDate is "this period" or "a previous one".
+ * For "weekly" recurrence: the period slot depends on what day TODAY is.
+ *  - Sunday (0)  → 'oggi'
+ *  - Saturday (6) → 'domani'
+ *  - Mon–Fri     → 'questa_settimana'
+ * If today is NOT a scheduled day, look ahead to the next scheduled day
+ * and return the appropriate slot for that day.
+ */
+function getWeeklyPeriodKey(rec) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  // Find next scheduled day (starting today)
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(today); d.setDate(today.getDate() + i);
+    const dow = d.getDay();
+    if (isScheduledWeeklyDay(rec, dow)) {
+      if (i === 0) {
+        // Today is scheduled: slot depends on day of week
+        if (dow === 0) return 'oggi';         // Sunday
+        if (dow === 6) return 'domani';       // Saturday
+        return 'questa_settimana';            // Mon–Fri
+      }
+      // Next occurrence is i days ahead
+      if (i === 1) return 'domani';
+      if (i <= 7)  return 'questa_settimana';
+      return 'prossima_settimana';
+    }
+  }
+  return 'questa_settimana';
+}
+
+/**
+ * Date of the NEXT occurrence of this recurrence, on or after `fromDate` (midnight local).
+ */
+function getNextOccurrenceDate(rec, fromDate) {
+  if (!rec || !rec.type) return null;
+  const d = new Date(fromDate); d.setHours(0, 0, 0, 0);
+
+  switch (rec.type) {
+    case 'daily':
+      return new Date(d);
+
+    case 'weekly': {
+      for (let i = 0; i < 7; i++) {
+        const c = new Date(d); c.setDate(d.getDate() + i);
+        if (isScheduledWeeklyDay(rec, c.getDay())) return c;
+      }
+      return null;
+    }
+
+    case 'custom': {
+      const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
+      for (let i = 0; i < 7; i++) {
+        const c = new Date(d); c.setDate(d.getDate() + i);
+        if (days.includes(c.getDay())) return c;
+      }
+      return null;
+    }
+
+    case 'monthly': {
+      const dom = rec.monthDay || d.getDate();
+      let c = new Date(d.getFullYear(), d.getMonth(), dom);
+      if (c.getMonth() !== d.getMonth()) c = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      if (c >= d) return c;
+      let nm = d.getMonth() + 1, ny = d.getFullYear();
+      if (nm > 11) { nm = 0; ny++; }
+      c = new Date(ny, nm, dom);
+      if (c.getMonth() !== nm) c = new Date(ny, nm + 1, 0);
+      return c;
+    }
+
+    case 'yearly': {
+      const month = rec.yearMonth !== undefined ? rec.yearMonth : d.getMonth();
+      const day   = rec.yearDay   !== undefined ? rec.yearDay   : d.getDate();
+      let c = new Date(d.getFullYear(), month, day);
+      if (c.getDate() !== day) c = new Date(d.getFullYear(), month + 1, 0);
+      if (c >= d) return c;
+      c = new Date(d.getFullYear() + 1, month, day);
+      if (c.getDate() !== day) c = new Date(d.getFullYear() + 1, month + 1, 0);
+      return c;
+    }
+  }
+  return null;
+}
+
+/** Map "N days until next occurrence" to the matching PERIODS key. */
+function periodKeyForDaysAhead(diffDays) {
+  if (diffDays <= 0) return 'oggi';
+  if (diffDays === 1) return 'domani';
+  if (diffDays <= 7) return 'questa_settimana';
+  if (diffDays <= 14) return 'prossima_settimana';
+  if (diffDays <= 31) return 'questo_mese';
+  if (diffDays <= 60) return 'prossimo_mese';
+  if (diffDays <= 120) return 'prossima_stagione';
+  if (diffDays <= 400) return 'prossimo_anno_scolastico';
+  return 'prossimi_5_anni';
+}
+
+/**
+ * Dynamically compute the PERIODS key for a recurring task based on today.
+ * Weekly has special day-of-week slot logic.
+ */
+function getRecurrencePeriodKey(rec) {
+  if (!rec || !rec.type) return null;
+  // Weekly: fixed slot logic (Sun→oggi, Sat→domani, Mon-Fri→questa_settimana)
+  if (rec.type === 'weekly') return getWeeklyPeriodKey(rec);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const next  = getNextOccurrenceDate(rec, today);
+  if (!next) return null;
+  const diffDays = Math.round((next.getTime() - today.getTime()) / 86400000);
+  return periodKeyForDaysAhead(diffDays);
+}
+
+/**
+ * ISO date of the START of the current recurrence "window".
  */
 function getRecurrencePeriodStart(type) {
   const now = new Date();
-  if (type === 'daily') {
+  if (type === 'daily' || type === 'custom') {
     return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
   if (type === 'weekly') {
-    const d = new Date(now);
-    const day = d.getDay();
-    const daysToMon = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + daysToMon);
-    return toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    // Each scheduled day is a fresh occurrence → use today
+    return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
   }
   if (type === 'monthly') {
     return toIso(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+  if (type === 'yearly') {
+    return toIso(now.getFullYear(), 1, 1);
   }
   return null;
 }
@@ -102,7 +229,20 @@ function getRecurrencePeriodStart(type) {
  */
 function isRecurringCompletedForPeriod(task) {
   if (!task.completed || !task.lastCompletedDate) return false;
-  const periodStart = getRecurrencePeriodStart(task.recurrence.type);
+  const rec = task.recurrence;
+  // Weekly and custom: per-day completion
+  if (rec.type === 'weekly' || rec.type === 'custom') {
+    const today = new Date();
+    const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+    // If today is not a scheduled day, consider it "not applicable" (show as hidden/done)
+    if (rec.type === 'weekly' && !isScheduledWeeklyDay(rec, today.getDay())) return true;
+    if (rec.type === 'custom') {
+      const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
+      if (!days.includes(today.getDay())) return true;
+    }
+    return task.lastCompletedDate === todayIso;
+  }
+  const periodStart = getRecurrencePeriodStart(rec.type);
   if (!periodStart) return task.completed;
   return task.lastCompletedDate >= periodStart;
 }
@@ -113,17 +253,30 @@ function isRecurringCompletedForPeriod(task) {
 function getRecurrenceLabel(rec) {
   if (!rec || !rec.type) return '';
   const days = (rec.days && rec.days.length > 0) ? [...rec.days].sort((a,b)=>a-b) : [];
-  if (rec.type === 'daily') {
+  if (rec.type === 'daily')  return 'Ogni giorno';
+  if (rec.type === 'custom') {
     if (days.length === 0 || days.length === 7) return 'Ogni giorno';
     if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Giorni feriali';
     if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Fine settimana';
     return days.map(d => DAY_NAMES_SHORT[d]).join(', ');
   }
   if (rec.type === 'weekly') {
-    if (days.length === 0) return 'Ogni settimana';
-    return 'Ogni ' + days.map(d => DAY_NAMES_SHORT[d]).join('/');
+    // days = INCLUDED days. Show which are excluded if not all 7.
+    if (days.length === 0 || days.length === 7) return 'Ogni settimana';
+    const excluded = [0,1,2,3,4,5,6].filter(d => !days.includes(d));
+    if (excluded.length === 0) return 'Ogni settimana';
+    if (excluded.length === 2 && excluded.includes(0) && excluded.includes(6)) return 'Giorni feriali';
+    return 'Ogni giorno tranne ' + excluded.map(d => DAY_NAMES_SHORT[d]).join(', ');
   }
-  if (rec.type === 'monthly') return 'Ogni mese';
+  if (rec.type === 'monthly') {
+    return rec.monthDay ? `Il ${rec.monthDay} di ogni mese` : 'Ogni mese';
+  }
+  if (rec.type === 'yearly') {
+    if (rec.yearMonth !== undefined && rec.yearDay) {
+      return `Ogni ${rec.yearDay} ${MONTHS_IT_SHORT[rec.yearMonth]}`;
+    }
+    return 'Ogni anno';
+  }
   return '';
 }
 
@@ -426,22 +579,36 @@ async function autoAdvanceOverdueTasks(listId) {
   state.tasks.forEach(task => {
     // ── New recurrence system: reset when the period rolls over ───
     if (isRecurringTask(task)) {
+      const rec = task.recurrence;
       if (task.completed) {
-        const periodStart = getRecurrencePeriodStart(task.recurrence.type);
+        const periodStart = getRecurrencePeriodStart(rec.type);
         const shouldReset = !task.lastCompletedDate || task.lastCompletedDate < periodStart;
-        if (shouldReset) {
-          // Also restore plannedPeriod in case it was auto-advanced as overdue
-          const correctPeriodKey = getRecurrencePeriodKey(task.recurrence);
+        // For custom (specific weekdays): also reset if today is a new scheduled day
+        const customShouldReset = rec.type === 'custom' && !isRecurringCompletedForPeriod(task);
+        if (shouldReset || customShouldReset) {
+          const correctPeriodKey = getRecurrencePeriodKey(rec);
           const correctPeriod = correctPeriodKey ? getPeriod(correctPeriodKey) : null;
           const reset = {
-            completed: false,
-            lastCompletedDate: null,
-            overdue: false,
+            completed: false, lastCompletedDate: null, overdue: false,
             plannedPeriod: correctPeriodKey || task.plannedPeriod,
             plannedPeriodUntil: correctPeriod ? correctPeriod.getEnd() : task.plannedPeriodUntil,
           };
           batch.update(tasksRef(listId).doc(task.id), reset);
           Object.assign(task, reset);
+          hasChanges = true;
+        }
+      } else {
+        // Not completed — dynamically update plannedPeriod based on next occurrence
+        const correctPeriodKey = getRecurrencePeriodKey(rec);
+        const correctPeriod = correctPeriodKey ? getPeriod(correctPeriodKey) : null;
+        if (correctPeriodKey && task.plannedPeriod !== correctPeriodKey) {
+          const update = {
+            plannedPeriod: correctPeriodKey,
+            plannedPeriodUntil: correctPeriod ? correctPeriod.getEnd() : null,
+            overdue: false,
+          };
+          batch.update(tasksRef(listId).doc(task.id), update);
+          Object.assign(task, update);
           hasChanges = true;
         }
       }
@@ -518,6 +685,7 @@ const state = {
 
 let currentUserUid    = null;
 let unsubscribeLists  = null;
+let quickRecurrence   = null; // recurrence set via the quick-add popover
 
 // Calendar state — persists across month navigation
 const calState = {
@@ -693,22 +861,26 @@ async function deleteList(listId) {
 // TASKS — CRUD
 // ============================================================
 
-async function addTask(name, periodKey, deadline) {
+async function addTask(name, periodKey, deadline, recurrence) {
   if (!state.activeListId || !name.trim()) return;
-  const p     = periodKey ? getPeriod(periodKey) : null;
+  // If a recurrence is set, compute the period dynamically
+  let finalPeriodKey = periodKey;
+  if (recurrence && recurrence.type) {
+    finalPeriodKey = getRecurrencePeriodKey(recurrence) || periodKey;
+  }
+  const p     = finalPeriodKey ? getPeriod(finalPeriodKey) : null;
   const until = p ? p.getEnd() : null;
-  // Inherit default milestones from the list definition
-  const list = state.lists.find(l => l.id === state.activeListId);
+  const list  = state.lists.find(l => l.id === state.activeListId);
   const defaultMs = (list && list.defaultMilestones)
     ? list.defaultMilestones.map(name => ({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), name, done: false }))
     : [];
   await tasksRef(state.activeListId).add({
     name: name.trim(), completed: false, notes: '', order: state.tasks.length,
     deadline: deadline || null,
-    plannedPeriod: periodKey || null,
+    plannedPeriod: finalPeriodKey || null,
     plannedPeriodUntil: until,
     overdue: false,
-    recurrence: null,
+    recurrence: recurrence || null,
     milestones: defaultMs,
     createdAt: firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -1197,11 +1369,69 @@ async function renderTimeline() {
             ${task.deadline ? `<span class="tl-deadline ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>` : ''}
             ${task.overdue  ? `<span class="tl-overdue-badge" ${overdueColor ? `style="color:${overdueColor};border-color:${overdueColor};background:${overdueColor}18"` : ''}>!</span>` : ''}
             ${task.plannedPeriod === 'ogni_giorno' ? '<span class="tl-daily-badge">↻</span>' : ''}
-            ${(() => { if (!isRecurringTask(task) || isCompletedToday(task)) return ''; const rk = getRecurrencePeriodKey(task.recurrence); const rp = rk ? getPeriod(rk) : null; const bc = rp ? rp.color : '#FF98A9'; const lb = getRecurrenceLabel(task.recurrence); return `<span class="task-recurrence-badge" style="color:${bc};border-color:${bc}50;background:${bc}18" title="${lb}">↻ ${lb}</span>`; })()}
-            ${(() => { const ms = task.milestones; if (!ms || ms.length === 0 || isCompletedToday(task)) return ''; const doneCnt = ms.filter(m=>m.done).length; const pct = Math.round(doneCnt/ms.length*100); const tlList = state.lists.find(l=>l.id===task.listId); const lc = getListColorHex(tlList); const grad = lc ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)` : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)'; return `<span class="task-mini-progress" title="${pct}%"><span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span><span class="task-mini-progress-label">${doneCnt}/${ms.length}</span></span>`; })()}
+            ${(() => { if (!isRecurringTask(task) || isCompletedToday(task)) return ''; const bc = getRecurrenceColor(task.recurrence.type); const lb = getRecurrenceLabel(task.recurrence); return `<span class="task-recurrence-badge" style="color:${bc};border-color:${bc}50;background:${bc}18" title="${lb}">↻ ${lb}</span>`; })()}
           </div>
         </div>
       `;
+
+      // ── Milestone chips + progress bar in timeline ────────────
+      if (!isEffectivelyDone) {
+        const ms = task.milestones;
+        if (ms && ms.length > 0) {
+          const doneCnt = ms.filter(m => m.done).length;
+          const pct     = Math.round(doneCnt / ms.length * 100);
+          const tlList  = state.lists.find(l => l.id === task.listId);
+          const lc      = getListColorHex(tlList);
+          const grad    = lc
+            ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)`
+            : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)';
+
+          // Container: chips row + bar
+          const msBlock = document.createElement('div');
+          msBlock.className = 'tl-ms-block';
+
+          // Chip row
+          const chipsRow = document.createElement('div');
+          chipsRow.className = 'tl-ms-chips';
+
+          ms.forEach((m, idx) => {
+            const chip = document.createElement('span');
+            chip.className = 'tl-ms-chip' + (m.done ? ' done' : '');
+            chip.textContent = m.name;
+            chip.title = m.done ? 'Clicca per riaprire' : 'Clicca per completare';
+
+            chip.addEventListener('click', async e => {
+              e.stopPropagation();
+              const freshTask = state.tasks.find(t => t.id === task.id) || task;
+              const freshMs   = (freshTask.milestones || []).map((fm, fi) =>
+                fi === idx ? { ...fm, done: !fm.done } : fm
+              );
+              const allDone = freshMs.every(fm => fm.done);
+              const updates = { milestones: freshMs };
+              if (allDone) Object.assign(updates, buildCompleteUpdate(freshTask, true));
+              else if (freshTask.completed) Object.assign(updates, buildCompleteUpdate(freshTask, false));
+              await updateTaskInList(task.listId, task.id, updates);
+              renderTimeline();
+            });
+
+            chipsRow.appendChild(chip);
+          });
+
+          // Mini progress bar
+          const progressWrap = document.createElement('div');
+          progressWrap.className = 'tl-ms-bar-wrap';
+          progressWrap.title    = `${doneCnt}/${ms.length} tappe completate`;
+          progressWrap.innerHTML = `
+            <div class="task-mini-progress tl-progress-bar">
+              <span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span>
+              <span class="task-mini-progress-label">${doneCnt}/${ms.length}</span>
+            </div>`;
+
+          msBlock.appendChild(chipsRow);
+          msBlock.appendChild(progressWrap);
+          row.querySelector('.tl-body').appendChild(msBlock);
+        }
+      }
 
       row.querySelector('.tl-check').addEventListener('click', async e => {
         e.stopPropagation();
@@ -1334,12 +1564,10 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
       >${bang}${period.label}</span>`);
     }
   }
-  // Recurrence badge (new system)
+  // Recurrence badge — fixed color per type, never inherits period color
   if (isRecurringTask(task) && !isDone) {
-    const recPeriodKey = getRecurrencePeriodKey(task.recurrence);
-    const recPeriod = recPeriodKey ? getPeriod(recPeriodKey) : null;
-    const badgeColor = recPeriod ? recPeriod.color : '#FF98A9';
-    const label = getRecurrenceLabel(task.recurrence);
+    const badgeColor = getRecurrenceColor(task.recurrence.type);
+    const label      = getRecurrenceLabel(task.recurrence);
     parts.push(`<span class="task-recurrence-badge" style="color:${badgeColor};border-color:${badgeColor}50;background:${badgeColor}18" title="${label}">↻ ${label}</span>`);
   }
   if (task.deadline && !isDone) {
@@ -1368,33 +1596,85 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
 // RECURRENCE UI
 // ============================================================
 
+function _showDetailRecurrenceSub(type) {
+  const daysWrap    = document.getElementById('detail-recurrence-days-wrap');
+  const monthlyWrap = document.getElementById('detail-recurrence-monthly-wrap');
+  const yearlyWrap  = document.getElementById('detail-recurrence-yearly-wrap');
+  const labelEl     = document.getElementById('detail-recurrence-days-label');
+  if (daysWrap)    daysWrap.classList.toggle('hidden',    !(type === 'custom' || type === 'weekly'));
+  if (monthlyWrap) monthlyWrap.classList.toggle('hidden', type !== 'monthly');
+  if (yearlyWrap)  yearlyWrap.classList.toggle('hidden',  type !== 'yearly');
+  if (labelEl) {
+    labelEl.textContent = type === 'weekly' ? 'Escludi giorni (clicca per deselezionare)' : 'Nei giorni';
+  }
+}
+
 function renderRecurrenceUI(task) {
-  const typeEl  = document.getElementById('detail-recurrence-type');
-  const wrapEl  = document.getElementById('detail-recurrence-days-wrap');
-  const hintEl  = document.getElementById('detail-recurrence-hint');
-  const labelEl = document.getElementById('detail-recurrence-days-label');
+  const typeEl = document.getElementById('detail-recurrence-type');
   if (!typeEl) return;
 
   const rec = task.recurrence || null;
   typeEl.value = rec ? rec.type : '';
 
-  // Show/hide the day-picker depending on type
-  const showDays = rec && (rec.type === 'daily' || rec.type === 'weekly');
-  if (wrapEl) wrapEl.classList.toggle('hidden', !showDays);
+  _showDetailRecurrenceSub(rec ? rec.type : '');
 
-  if (labelEl) {
-    labelEl.textContent = rec && rec.type === 'weekly' ? 'Il giorno' : 'Nei giorni';
+  // Day buttons
+  // weekly: rec.days = INCLUDED days (empty = all). Active = included. Clicking deselects.
+  // custom: rec.days = included days. Active = included.
+  if (rec && rec.type === 'weekly') {
+    const includedDays = (rec.days && rec.days.length > 0) ? rec.days : [0,1,2,3,4,5,6];
+    document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
+      btn.classList.toggle('active', includedDays.includes(parseInt(btn.dataset.day, 10)));
+    });
+  } else {
+    const activeDays = (rec && rec.days) ? rec.days : [];
+    document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
+      btn.classList.toggle('active', activeDays.includes(parseInt(btn.dataset.day, 10)));
+    });
   }
 
-  // Mark active days
-  const activeDays = (rec && rec.days) ? rec.days : [];
-  document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
-    const d = parseInt(btn.dataset.day, 10);
-    btn.classList.toggle('active', activeDays.includes(d));
-  });
+  // Monthly day input
+  const monthlyInput = document.getElementById('detail-recurrence-monthly-day');
+  if (monthlyInput) monthlyInput.value = (rec && rec.monthDay) ? rec.monthDay : '';
 
-  // Update hint label
+  // Yearly inputs
+  const yearlyDay   = document.getElementById('detail-recurrence-yearly-day');
+  const yearlyMonth = document.getElementById('detail-recurrence-yearly-month');
+  if (yearlyDay)   yearlyDay.value   = (rec && rec.yearDay   !== undefined) ? rec.yearDay   : '';
+  if (yearlyMonth) yearlyMonth.value = (rec && rec.yearMonth !== undefined) ? rec.yearMonth : '0';
+
+  const hintEl = document.getElementById('detail-recurrence-hint');
   if (hintEl) hintEl.textContent = rec ? getRecurrenceLabel(rec) : '';
+}
+
+function _readDetailRecurrence() {
+  const typeEl = document.getElementById('detail-recurrence-type');
+  const type   = typeEl ? typeEl.value : '';
+  if (!type) return null;
+
+  const rec = { type };
+
+  if (type === 'custom') {
+    rec.days = [...document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active')]
+      .map(b => parseInt(b.dataset.day, 10));
+  }
+  if (type === 'weekly') {
+    // Active buttons = included days. All 7 active = every day (store as empty = all).
+    const active = [...document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active')]
+      .map(b => parseInt(b.dataset.day, 10));
+    rec.days = active.length === 7 ? [] : active; // empty means all days
+  }
+  if (type === 'monthly') {
+    const v = parseInt(document.getElementById('detail-recurrence-monthly-day')?.value, 10);
+    rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
+  }
+  if (type === 'yearly') {
+    const d = parseInt(document.getElementById('detail-recurrence-yearly-day')?.value, 10);
+    const m = parseInt(document.getElementById('detail-recurrence-yearly-month')?.value, 10);
+    rec.yearDay   = (!isNaN(d) && d >= 1 && d <= 31) ? d : null;
+    rec.yearMonth = !isNaN(m) ? m : null;
+  }
+  return rec;
 }
 
 function saveRecurrence() {
@@ -1402,21 +1682,15 @@ function saveRecurrence() {
   const task = state.tasks.find(t => t.id === state.activeTaskId);
   if (!task) return;
 
-  const typeEl = document.getElementById('detail-recurrence-type');
-  const type   = typeEl ? typeEl.value : '';
+  const rec = _readDetailRecurrence();
 
-  if (!type) {
-    // Remove recurrence — also clear the auto-managed plannedPeriod if it was set by recurrence
+  if (!rec) {
     updateTask(state.activeTaskId, { recurrence: null });
+    const hintEl = document.getElementById('detail-recurrence-hint');
+    if (hintEl) hintEl.textContent = '';
     return;
   }
 
-  const days = [];
-  document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active').forEach(btn => {
-    days.push(parseInt(btn.dataset.day, 10));
-  });
-
-  const rec = { type, days };
   const periodKey = getRecurrencePeriodKey(rec);
   const period    = periodKey ? getPeriod(periodKey) : null;
   const until     = period ? period.getEnd() : null;
@@ -1430,7 +1704,6 @@ function saveRecurrence() {
     overdue:            false,
   });
 
-  // Refresh the hint
   const hintEl = document.getElementById('detail-recurrence-hint');
   if (hintEl) hintEl.textContent = getRecurrenceLabel(rec);
 }
@@ -1746,15 +2019,123 @@ function bindEvents() {
     const period   = el.taskPeriodQuick?.value  || null;
     const deadline = el.taskDeadlineQuick?.value || null;
     if (!name) return;
-    addTask(name, period, deadline);
+    addTask(name, period, deadline, quickRecurrence);
     el.taskInput.value = '';
     if (el.taskDeadlineQuick) el.taskDeadlineQuick.value = '';
     if (el.taskPeriodQuick)   el.taskPeriodQuick.value   = '';
+    // Reset recurrence after add
+    quickRecurrence = null;
+    updateQuickRecurrenceBtn();
     el.taskInput.focus();
   }
 
   el.btnAddTask.addEventListener('click', doAddTask);
   el.taskInput.addEventListener('keydown', e => { if (e.key === 'Enter') doAddTask(); });
+
+  // ── Quick-recurrence popover ─────────────────────────────────
+  const qrpEl      = document.getElementById('quick-recurrence-popover');
+  const btnQrp     = document.getElementById('btn-quick-recurrence');
+  const qrpSummary = document.getElementById('qrp-summary');
+
+  // Build day-picker buttons into both qrp-days-weekly and qrp-days-custom
+  ['qrp-days-weekly','qrp-days-custom'].forEach(id => {
+    const wrap = document.getElementById(id);
+    if (!wrap) return;
+    [[1,'Lun'],[2,'Mar'],[3,'Mer'],[4,'Gio'],[5,'Ven'],[6,'Sab'],[0,'Dom']].forEach(([day, label]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'recurrence-day-btn';
+      btn.dataset.day = day; btn.textContent = label;
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        btn.classList.toggle('active'); // both weekly and custom: toggle
+        buildQuickRecurrence();
+      });
+      wrap.appendChild(btn);
+    });
+  });
+
+  // When user selects "weekly" type, initialise all 7 days as active
+  function initWeeklyDays() {
+    document.querySelectorAll('#qrp-days-weekly .recurrence-day-btn').forEach(b => b.classList.add('active'));
+  }
+
+  function buildQuickRecurrence() {
+    const activeBtn = qrpEl.querySelector('.qrp-type-btn.active');
+    const type = activeBtn ? activeBtn.dataset.type : '';
+    if (!type) { quickRecurrence = null; }
+    else {
+      const rec = { type };
+      if (type === 'custom') {
+        rec.days = [...document.querySelectorAll('#qrp-days-custom .recurrence-day-btn.active')]
+          .map(b => parseInt(b.dataset.day, 10));
+      }
+      if (type === 'weekly') {
+        // Active buttons = INCLUDED days. All 7 = empty (every day).
+        const active = [...document.querySelectorAll('#qrp-days-weekly .recurrence-day-btn.active')]
+          .map(b => parseInt(b.dataset.day, 10));
+        rec.days = active.length === 7 ? [] : active;
+      }
+      if (type === 'monthly') {
+        const v = parseInt(document.getElementById('qrp-monthly-day')?.value, 10);
+        rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
+      }
+      if (type === 'yearly') {
+        const d = parseInt(document.getElementById('qrp-yearly-day')?.value, 10);
+        const m = parseInt(document.getElementById('qrp-yearly-month')?.value, 10);
+        rec.yearDay   = (!isNaN(d) && d >= 1 && d <= 31) ? d : null;
+        rec.yearMonth = (!isNaN(m)) ? m : null;
+      }
+      quickRecurrence = rec;
+    }
+    updateQuickRecurrenceBtn();
+    if (qrpSummary) qrpSummary.textContent = quickRecurrence ? getRecurrenceLabel(quickRecurrence) : '';
+  }
+
+  function updateQuickRecurrenceBtn() {
+    if (!btnQrp) return;
+    const isSet = !!(quickRecurrence && quickRecurrence.type);
+    btnQrp.classList.toggle('active', isSet);
+    btnQrp.title = isSet ? ('Ricorrenza: ' + getRecurrenceLabel(quickRecurrence)) : 'Imposta ricorrenza';
+  }
+
+  function showQrpSub(type) {
+    ['weekly','monthly','yearly','custom'].forEach(t => {
+      const el = document.getElementById('qrp-sub-' + t);
+      if (el) el.classList.toggle('hidden', t !== type);
+    });
+  }
+
+  if (btnQrp && qrpEl) {
+    btnQrp.addEventListener('click', e => {
+      e.stopPropagation();
+      qrpEl.classList.toggle('hidden');
+    });
+    // Type buttons
+    qrpEl.querySelectorAll('.qrp-type-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        qrpEl.querySelectorAll('.qrp-type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        showQrpSub(btn.dataset.type);
+        if (btn.dataset.type === 'weekly') initWeeklyDays();
+        buildQuickRecurrence();
+      });
+    });
+    // Monthly day input
+    const qrpMonthly = document.getElementById('qrp-monthly-day');
+    if (qrpMonthly) qrpMonthly.addEventListener('input', e => { e.stopPropagation(); buildQuickRecurrence(); });
+    // Yearly inputs
+    ['qrp-yearly-day','qrp-yearly-month'].forEach(id => {
+      const inp = document.getElementById(id);
+      if (inp) inp.addEventListener('change', e => { e.stopPropagation(); buildQuickRecurrence(); });
+    });
+    // Close on outside click
+    document.addEventListener('click', e => {
+      if (!qrpEl.classList.contains('hidden') && !qrpEl.contains(e.target) && e.target !== btnQrp) {
+        qrpEl.classList.add('hidden');
+      }
+    });
+  }
 
   if (el.btnClearDeadlineQuick) {
     el.btnClearDeadlineQuick.addEventListener('click', () => {
@@ -1809,37 +2190,38 @@ function bindEvents() {
     updateTask(state.activeTaskId, { plannedPeriod: key, plannedPeriodUntil: until, overdue: false });
   });
 
-  // ── Recurrence type select ───────────────────────────────────
+  // ── Detail panel: recurrence type select ────────────────────
   const recTypeEl = document.getElementById('detail-recurrence-type');
   if (recTypeEl) {
     recTypeEl.addEventListener('change', () => {
-      const task = state.activeTaskId ? state.tasks.find(t => t.id === state.activeTaskId) : null;
-      const wrapEl  = document.getElementById('detail-recurrence-days-wrap');
-      const labelEl = document.getElementById('detail-recurrence-days-label');
-      const type    = recTypeEl.value;
-      const showDays = type === 'daily' || type === 'weekly';
-      if (wrapEl) wrapEl.classList.toggle('hidden', !showDays);
-      if (labelEl) labelEl.textContent = type === 'weekly' ? 'Il giorno' : 'Nei giorni';
-      // Reset day selections when type changes
-      document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => btn.classList.remove('active'));
+      const type = recTypeEl.value;
+      _showDetailRecurrenceSub(type);
+      if (type === 'weekly') {
+        // Default: all days included (all active)
+        document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.add('active'));
+      } else {
+        document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.remove('active'));
+      }
       saveRecurrence();
     });
   }
 
-  // ── Recurrence day buttons ───────────────────────────────────
+  // Day buttons in detail panel — both weekly and custom use toggle (multi)
   document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const type = recTypeEl ? recTypeEl.value : '';
-      if (type === 'weekly') {
-        // Single-select for weekly
-        document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      } else {
-        // Multi-select for daily custom
-        btn.classList.toggle('active');
-      }
+      btn.classList.toggle('active');
       saveRecurrence();
     });
+  });
+
+  // Monthly day input in detail panel
+  const detailMonthlyDay = document.getElementById('detail-recurrence-monthly-day');
+  if (detailMonthlyDay) detailMonthlyDay.addEventListener('change', saveRecurrence);
+
+  // Yearly inputs in detail panel
+  ['detail-recurrence-yearly-day', 'detail-recurrence-yearly-month'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener('change', saveRecurrence);
   });
 
   // Timeline: re-render when "show completed" toggle changes
