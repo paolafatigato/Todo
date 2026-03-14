@@ -494,6 +494,8 @@ const el = {
   btnTlCancel:          document.getElementById('btn-tl-cancel'),
   // Sidebar search
   sidebarSearch:        document.getElementById('sidebar-search'),
+  homeSearch:           document.getElementById('home-search'),
+  homeSearchWrap:       document.getElementById('home-search-wrap'),
   // List settings button
   btnListSettings:      document.getElementById('btn-list-settings'),
   // List settings modal
@@ -813,7 +815,8 @@ function updateStarButton(isStarred) {
 // ============================================================
 
 function renderSidebar() {
-  const query = (el.sidebarSearch?.value || '').trim().toLowerCase();
+  // On mobile the search is in homepage; on desktop it's in the sidebar
+  const query = (el.sidebarSearch?.value || el.homeSearch?.value || '').trim().toLowerCase();
   el.listsNav.innerHTML = '';
   const filtered = query
     ? state.lists.filter(l => (l.name || '').toLowerCase().includes(query))
@@ -857,7 +860,12 @@ function renderHomepage() {
   if (el.homepage.classList.contains('hidden')) return;
   el.homeCards.innerHTML = '';
 
-  if (state.lists.length === 0) {
+  const query = (el.homeSearch?.value || el.sidebarSearch?.value || '').trim().toLowerCase();
+  const visibleLists = query
+    ? state.lists.filter(l => (l.name || '').toLowerCase().includes(query))
+    : state.lists;
+
+  if (visibleLists.length === 0 && state.lists.length === 0) {
     el.homeCards.innerHTML = `
       <div class="empty-state">
         <div class="empty-state-icon">📋</div>
@@ -866,7 +874,16 @@ function renderHomepage() {
     return;
   }
 
-  state.lists.forEach(list => {
+  if (visibleLists.length === 0) {
+    el.homeCards.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-text">Nessuna lista trovata.</div>
+      </div>`;
+    return;
+  }
+
+  visibleLists.forEach(list => {
     const colorHex = getListColorHex(list);
     const card = document.createElement('div');
     card.className = 'home-card';
@@ -1048,12 +1065,17 @@ async function renderTimeline() {
       const deadlinePast = isDeadlinePast(task.deadline);
 
       const isEffectivelyDone = isCompletedToday(task);
+      const overdueColor = task.overdue ? getOverdueColor(task) : null;
       const row = document.createElement('div');
       row.className = [
         'timeline-task-row',
         isEffectivelyDone ? 'completed' : '',
         task.overdue      ? 'overdue'   : '',
       ].filter(Boolean).join(' ');
+      if (overdueColor) {
+        row.style.borderLeftColor = overdueColor;
+        row.style.background = `linear-gradient(90deg, ${overdueColor}18 0%, var(--surface) 50px)`;
+      }
 
       row.innerHTML = `
         <span class="tl-check ${isEffectivelyDone ? 'checked' : ''}"></span>
@@ -1062,7 +1084,7 @@ async function renderTimeline() {
           <div class="tl-meta">
             <span class="tl-list-tag">${escapeHtml(listName)}</span>
             ${task.deadline ? `<span class="tl-deadline ${deadlinePast ? 'past' : ''}">⏰ ${formatDeadline(task.deadline)}</span>` : ''}
-            ${task.overdue  ? '<span class="tl-overdue-badge">!</span>' : ''}
+            ${task.overdue  ? `<span class="tl-overdue-badge" ${overdueColor ? `style="color:${overdueColor};border-color:${overdueColor};background:${overdueColor}18"` : ''}>!</span>` : ''}
             ${task.plannedPeriod === 'ogni_giorno' ? '<span class="tl-daily-badge">↻</span>' : ''}
             ${(() => { const ms = task.milestones; if (!ms || ms.length === 0 || isCompletedToday(task)) return ''; const doneCnt = ms.filter(m=>m.done).length; const pct = Math.round(doneCnt/ms.length*100); const tlList = state.lists.find(l=>l.id===task.listId); const lc = getListColorHex(tlList); const grad = lc ? `linear-gradient(90deg, ${lc} 0%, #FF98A9 100%)` : 'linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%)'; return `<span class="task-mini-progress" title="${pct}%"><span class="task-mini-progress-fill" style="width:${pct}%;background:${grad}"></span><span class="task-mini-progress-label">${doneCnt}/${ms.length}</span></span>`; })()}
           </div>
@@ -1709,9 +1731,15 @@ function bindEvents() {
 
   // ── Sidebar search ───────────────────────────────────────────
   if (el.sidebarSearch) {
-    el.sidebarSearch.addEventListener('input', renderSidebar);
+    el.sidebarSearch.addEventListener('input', () => { renderSidebar(); renderHomepage(); });
     el.sidebarSearch.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { el.sidebarSearch.value = ''; renderSidebar(); }
+      if (e.key === 'Escape') { el.sidebarSearch.value = ''; renderSidebar(); renderHomepage(); }
+    });
+  }
+  if (el.homeSearch) {
+    el.homeSearch.addEventListener('input', () => { renderSidebar(); renderHomepage(); });
+    el.homeSearch.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { el.homeSearch.value = ''; renderSidebar(); renderHomepage(); }
     });
   }
 

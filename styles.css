@@ -124,6 +124,13 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.12);
 }
 
+/* On desktop, header contains logo + new-list button */
+#sidebar-new-btn-wrap {
+  padding: 0 20px 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .logo {
   font-family: var(--font-display);
   font-weight: 800;
@@ -132,7 +139,8 @@ body {
   color: var(--yellow);
 }
 
-#sidebar-header button {
+/* Style btn-new-list by ID (previously via #sidebar-header button) */
+#btn-new-list {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -148,7 +156,7 @@ body {
   flex-shrink: 0;
 }
 
-#sidebar-header button:hover { transform: rotate(90deg) scale(1.1); background: var(--pink); }
+#btn-new-list:hover { transform: rotate(90deg) scale(1.1); background: var(--pink); }
 
 /* List navigation */
 #lists-nav {
@@ -901,29 +909,122 @@ body {
     height: auto;
   }
 
+  /* ── Sidebar: 3 sections in a row ── */
   #sidebar {
     height: auto;
     flex-direction: row;
-    align-items: center;
+    align-items: stretch;
     overflow: visible;
+    padding: 0;
+    gap: 0;
   }
 
-  #sidebar-header { border-bottom: none; padding: 14px 16px; flex: 1; }
+  #sidebar::before { height: 3px; }
 
-  #lists-nav {
-    display: none; /* hidden on mobile — use the sidebar toggle if needed */
+  /* Section 1 — Logo */
+  #sidebar-header {
+    border-bottom: none;
+    padding: 12px 14px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-start;
+    border-right: 1px solid rgba(255,255,255,0.12);
   }
 
-  /* Sidebar footer: reduced width on mobile to free space */
-  #sidebar-footer { padding: 14px 12px; border-top: none; flex: none; width: 160px; margin-left: auto; }
+  /* Section 2 — + button */
+  #sidebar-new-btn-wrap {
+    flex: 0 0 auto;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-right: 1px solid rgba(255,255,255,0.12);
+  }
 
-  #main { height: calc(100vh - 60px); }
+  /* Section 3 — Nav buttons (left-aligned, stacked) */
+  #sidebar-footer {
+    flex: 1;
+    padding: 8px 12px;
+    border-top: none;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 2px;
+    width: auto;
+    margin-left: 0;
+  }
 
+  #btn-home,
+  #btn-timeline,
+  #btn-calendar {
+    width: auto;
+    padding: 4px 8px;
+    font-size: 0.78rem;
+    text-align: left;
+    margin-top: 0;
+    border-radius: 5px;
+  }
+
+  .auth-controls { display: none !important; }
+
+  /* Hide list nav and search on mobile */
+  #lists-nav { display: none; }
+  #sidebar-search-wrap { display: none !important; }
+
+  /* Main area height */
+  #main { height: calc(100vh - 80px); }
+
+  /* List header / task list */
   #list-header { padding: 16px 18px 0; }
   #task-list { padding: 12px 18px 60px; }
-  #homepage { padding: 24px 18px 60px; }
-  #home-header h1 { font-size: 1.8rem; }
+  #homepage { padding: 16px 14px 60px; }
+  #home-header h1 { font-size: 1.6rem; }
 
+  /* Fix title row overflow */
+  #list-title-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  #list-title-input {
+    flex: 0 0 100%;
+    font-size: 1.35rem;
+  }
+  #list-sort-select {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.82rem;
+    padding: 6px 8px;
+  }
+
+  /* ── Add-task row: input + button on row 1, meta on row 2 ── */
+  #add-task-row {
+    flex-wrap: wrap;     /* allow wrapping */
+    align-items: center;
+    gap: 8px;
+  }
+
+  #task-input {
+    flex: 1;
+    min-width: 0;
+    order: 1;
+  }
+
+  /* + button: row 1, right of input */
+  #btn-add-task {
+    order: 2;
+    flex-shrink: 0;
+    align-self: flex-start;
+  }
+
+  /* Meta row: always on its own line below */
+  #add-task-meta {
+    order: 3;
+    flex: 0 0 100%;
+    flex-wrap: wrap;
+  }
+
+  /* Detail panel: bottom sheet */
   #detail-panel {
     width: 100%;
     bottom: 0;
@@ -934,13 +1035,8 @@ body {
   }
 
   #detail-panel.open { transform: translateY(0); }
+}
 
-    /* Variabile CSS spostata nel blocco :root */
-  }
-
-  :root {
-    --detail-w: 100%;
-  }
 :root {
   --detail-w: 100%;
 }
@@ -2525,10 +2621,6 @@ body {
   font-style: italic;
 }
 
-/* Mobile: hide search (sidebar is horizontal on mobile) */
-@media (max-width: 700px) {
-  #sidebar-search-wrap { display: none; }
-}
 
 
 /* ============================================================
@@ -2882,37 +2974,48 @@ body {
    SIDEBAR MOBILE — "Le mie liste" title
    ============================================================ */
 
-.sidebar-title-mobile {
-  display: none;
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: 1rem;
-  color: var(--yellow);
-  flex: 1;
-  padding-left: 8px;
+/* ============================================================
+   HOMEPAGE SEARCH BAR
+   ============================================================ */
+
+#home-search-wrap {
+  padding: 0 0 20px;
+  position: relative;
 }
 
-@media (max-width: 700px) {
-  .sidebar-title-mobile { display: block; }
-  /* Hide the logo mark on mobile to give room to the title */
-  .logo { display: none; }
-  /* Show the search wrap on mobile as a separate full-width row */
-  #sidebar-search-wrap {
-    display: flex;
-    width: 100%;
-    order: 99; /* after everything in flex row */
-    padding: 6px 12px 8px;
-  }
-  /* Make the sidebar a grid so the search can span below */
-  #sidebar {
-    flex-direction: column;
-  }
-  #sidebar-header {
-    width: 100%;
-  }
-  #sidebar-search-wrap {
-    display: block;
-  }
+#home-search {
+  width: 100%;
+  padding: 10px 16px 10px 38px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color var(--t), box-shadow var(--t);
+}
+
+#home-search:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.10);
+}
+
+#home-search::placeholder { color: var(--text-muted); }
+
+#home-search-wrap::before {
+  content: '🔍';
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-65%);
+  font-size: 0.82rem;
+  pointer-events: none;
+  opacity: 0.45;
+}
+
+/* On desktop the sidebar already has search — hide homepage search */
+@media (min-width: 701px) {
+  #home-search-wrap { display: none; }
 }
 
 /* ============================================================
