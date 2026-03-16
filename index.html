@@ -30,12 +30,18 @@
     </div>
     <ul id="lists-nav" role="list"></ul>
     <div id="sidebar-footer">
-      <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
-      <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
-      <button id="btn-calendar" title="Calendario">◫ Calendario</button>
+      <div id="sidebar-buttons">
+        <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
+        <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
+        <button id="btn-calendar" title="Calendario">◫ Calendario</button>
+      </div>
+      <div id="mobile-logout-trigger" class="hidden" title="Menu logout"></div>
       <div class="auth-controls">
         <button id="btn-login" title="Accedi con Google">Login</button>
         <button id="btn-logout" class="hidden" title="Esci">Logout</button>
+      </div>
+      <div id="mobile-logout-menu" class="hidden">
+        <button id="btn-logout-mobile" title="Esci">Logout</button>
       </div>
     </div>
   </aside>
@@ -86,18 +92,17 @@
               <button class="qrp-type-btn active" data-type="">Mai</button>
               <button class="qrp-type-btn" data-type="daily">Ogni giorno</button>
               <button class="qrp-type-btn" data-type="weekly">Ogni settimana</button>
-              <button class="qrp-type-btn" data-type="monthly">Ogni mese</button>
               <button class="qrp-type-btn" data-type="yearly">Ogni anno</button>
               <button class="qrp-type-btn" data-type="custom">Personalizza</button>
             </div>
-            <div id="qrp-sub-weekly" class="qrp-sub hidden">
-              <div class="qrp-sub-label">Escludi giorni (clicca per deselezionare)</div>
-              <div class="recurrence-day-picker" id="qrp-days-weekly"></div>
+
+            <!-- Per "ogni giorno": selezione giorni (tutti attivi di default) -->
+            <div id="qrp-sub-daily" class="qrp-sub hidden">
+              <div class="qrp-sub-label">Nei giorni (deseleziona per escludere)</div>
+              <div class="recurrence-day-picker" id="qrp-days-daily"></div>
             </div>
-            <div id="qrp-sub-monthly" class="qrp-sub hidden">
-              <div class="qrp-sub-label">Giorno del mese</div>
-              <input type="number" id="qrp-monthly-day" min="1" max="31" placeholder="es. 15" />
-            </div>
+
+            <!-- Per "ogni anno": data specifica -->
             <div id="qrp-sub-yearly" class="qrp-sub hidden">
               <div class="qrp-sub-label">Data dell'anno (gg/mm)</div>
               <div class="qrp-yearly-row">
@@ -112,10 +117,58 @@
                 </select>
               </div>
             </div>
+
+            <!-- Per "personalizza": sotto-tipo + campi dinamici -->
             <div id="qrp-sub-custom" class="qrp-sub hidden">
-              <div class="qrp-sub-label">Giorni della settimana</div>
-              <div class="recurrence-day-picker" id="qrp-days-custom"></div>
+              <div class="qrp-sub-label">Personalizza ricorrenza</div>
+              <select id="qrp-custom-subtype" class="qrp-custom-subtype-sel">
+                <option value="monthDay">Giorno del mese</option>
+                <option value="nthWeekOfMonth">Settimana del mese</option>
+                <option value="nthWeekday">Giorno della settimana</option>
+              </select>
+
+              <!-- monthDay -->
+              <div id="qrp-custom-monthday" class="qrp-custom-sub-inner hidden">
+                <div class="custom-inline-row">
+                  <span>Il giorno</span>
+                  <input type="number" id="qrp-custom-monthday-n" min="1" max="31" placeholder="es. 12" />
+                  <span>di ogni mese</span>
+                </div>
+              </div>
+
+              <!-- nthWeekOfMonth -->
+              <div id="qrp-custom-nthweek" class="qrp-custom-sub-inner hidden">
+                <div class="custom-inline-row">
+                  <span>La</span>
+                  <select id="qrp-custom-nthweek-n">
+                    <option value="1">1ª</option><option value="2">2ª</option>
+                    <option value="3">3ª</option><option value="4">4ª</option><option value="5">5ª</option>
+                  </select>
+                  <span>settimana di ogni mese</span>
+                </div>
+              </div>
+
+              <!-- nthWeekday -->
+              <div id="qrp-custom-nthweekday" class="qrp-custom-sub-inner hidden">
+                <div class="custom-inline-row">
+                  <select id="qrp-custom-nthweekday-n">
+                    <option value="1">1°</option><option value="2">2°</option>
+                    <option value="3">3°</option><option value="4">4°</option>
+                  </select>
+                  <select id="qrp-custom-nthweekday-day">
+                    <option value="1">Lunedì</option><option value="2">Martedì</option>
+                    <option value="3">Mercoledì</option><option value="4">Giovedì</option>
+                    <option value="5">Venerdì</option><option value="6">Sabato</option>
+                    <option value="0">Domenica</option>
+                  </select>
+                  <select id="qrp-custom-nthweekday-scope">
+                    <option value="month">del mese</option>
+                    <option value="year">dell'anno</option>
+                  </select>
+                </div>
+              </div>
             </div>
+
             <div id="qrp-summary" class="qrp-summary"></div>
           </div>
         </div>
@@ -227,13 +280,14 @@
             <option value="">Mai</option>
             <option value="daily">Ogni giorno</option>
             <option value="weekly">Ogni settimana</option>
-            <option value="monthly">Ogni mese</option>
             <option value="yearly">Ogni anno</option>
             <option value="custom">Personalizza</option>
           </select>
         </div>
+
+        <!-- "Ogni giorno": day picker — all active by default = really every day -->
         <div class="planning-field recurrence-days-wrap hidden" id="detail-recurrence-days-wrap">
-          <label id="detail-recurrence-days-label">Nei giorni</label>
+          <label id="detail-recurrence-days-label">Nei giorni (deseleziona per escludere)</label>
           <div class="recurrence-day-picker" id="detail-recurrence-days">
             <button type="button" class="recurrence-day-btn" data-day="1">Lun</button>
             <button type="button" class="recurrence-day-btn" data-day="2">Mar</button>
@@ -245,15 +299,85 @@
           </div>
           <span class="recurrence-days-hint" id="detail-recurrence-hint"></span>
         </div>
-        <div class="planning-field hidden" id="detail-recurrence-monthly-wrap">
-          <label for="detail-recurrence-monthly-day">Giorno del mese</label>
-          <input type="number" id="detail-recurrence-monthly-day" min="1" max="31" placeholder="es. 15" />
-        </div>
+
+        <!-- "Ogni anno": date picker -->
         <div class="planning-field hidden" id="detail-recurrence-yearly-wrap">
-          <label>Data dell'anno</label>
+          <label>Data (giorno / mese)</label>
           <div class="qrp-yearly-row">
             <input type="number" id="detail-recurrence-yearly-day" min="1" max="31" placeholder="Giorno" />
             <select id="detail-recurrence-yearly-month">
+              <option value="0">Gennaio</option><option value="1">Febbraio</option>
+              <option value="2">Marzo</option><option value="3">Aprile</option>
+              <option value="4">Maggio</option><option value="5">Giugno</option>
+              <option value="6">Luglio</option><option value="7">Agosto</option>
+              <option value="8">Settembre</option><option value="9">Ottobre</option>
+              <option value="10">Novembre</option><option value="11">Dicembre</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- "Personalizza": sub-type selector -->
+        <div class="planning-field hidden" id="detail-recurrence-custom-wrap">
+          <label for="detail-custom-subtype">Tipo</label>
+          <select id="detail-custom-subtype">
+            <option value="monthDay">Ogni giorno X del mese</option>
+            <option value="nthWeekOfMonth">Ogni N-esima settimana del mese</option>
+            <option value="nthWeekday">Ogni N-esimo giorno della settimana</option>
+          </select>
+        </div>
+
+        <!-- Personalizza — ogni giorno X del mese -->
+        <div class="planning-field hidden" id="detail-custom-monthday-wrap">
+          <div class="custom-inline-row">
+            <span>Il giorno</span>
+            <input type="number" id="detail-custom-monthday" min="1" max="31" placeholder="es. 12" />
+            <span>di ogni mese</span>
+          </div>
+        </div>
+
+        <!-- Personalizza — N-esima settimana del mese -->
+        <div class="planning-field hidden" id="detail-custom-nthweek-wrap">
+          <div class="custom-inline-row">
+            <span>La</span>
+            <select id="detail-custom-nthweek-n">
+              <option value="1">1ª</option>
+              <option value="2">2ª</option>
+              <option value="3">3ª</option>
+              <option value="4">4ª</option>
+              <option value="5">5ª</option>
+            </select>
+            <span>settimana di ogni mese</span>
+          </div>
+        </div>
+
+        <!-- Personalizza — N-esimo giorno della settimana -->
+        <div class="planning-field hidden" id="detail-custom-nthweekday-wrap">
+          <div class="custom-inline-row">
+            <span>Il</span>
+            <select id="detail-custom-nthweekday-n">
+              <option value="1">1°</option>
+              <option value="2">2°</option>
+              <option value="3">3°</option>
+              <option value="4">4°</option>
+            </select>
+            <select id="detail-custom-nthweekday-day">
+              <option value="1">Lunedì</option>
+              <option value="2">Martedì</option>
+              <option value="3">Mercoledì</option>
+              <option value="4">Giovedì</option>
+              <option value="5">Venerdì</option>
+              <option value="6">Sabato</option>
+              <option value="0">Domenica</option>
+            </select>
+            <select id="detail-custom-nthweekday-scope">
+              <option value="month">del mese</option>
+              <option value="year">dell'anno</option>
+            </select>
+          </div>
+          <!-- Shown only when scope = "year" to optionally pick a specific month -->
+          <div class="custom-inline-row hidden" id="detail-custom-nthweekday-month-wrap">
+            <span>di</span>
+            <select id="detail-custom-nthweekday-month">
               <option value="0">Gennaio</option><option value="1">Febbraio</option>
               <option value="2">Marzo</option><option value="3">Aprile</option>
               <option value="4">Maggio</option><option value="5">Giugno</option>
@@ -366,11 +490,10 @@
     </div>
   </div>
 
-  <!-- MOBILE FOOTER (logout on small screens) -->
+  <!-- MOBILE FOOTER (login on small screens) -->
   <footer id="mobile-footer">
     <div class="mobile-footer-inner">
       <button id="btn-login-mobile" class="hidden" title="Accedi">Accedi</button>
-      <button id="btn-logout-mobile" class="hidden" title="Esci">Logout</button>
     </div>
   </footer>
 

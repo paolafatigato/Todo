@@ -223,9 +223,20 @@ body {
 #sidebar-footer {
   padding: 12px 10px;
   border-top: 1px solid rgba(255,255,255,0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-#btn-home {
+#sidebar-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#btn-home,
+#btn-timeline,
+#btn-calendar {
   width: 100%;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
@@ -1734,19 +1745,6 @@ body {
 #qrp-yearly-month:focus,
 #detail-recurrence-yearly-month:focus { border-color: var(--blue); }
 
-#detail-recurrence-monthly-day {
-  width: 100%;
-  padding: 9px 12px;
-  border: 2px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-body);
-  font-size: 0.9rem;
-  outline: none;
-  transition: border-color var(--t);
-}
-
-#detail-recurrence-monthly-day:focus { border-color: var(--blue); }
-
 #detail-recurrence-yearly-day {
   width: 80px;
   padding: 9px 10px;
@@ -1767,6 +1765,117 @@ body {
   color: var(--blue);
   min-height: 1em;
 }
+
+/* ============================================================
+   CUSTOM RECURRENCE — inline rows and sub-sections
+   ============================================================ */
+
+/* Inline row: label + compact input(s) side-by-side */
+.custom-inline-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.custom-inline-row span {
+  white-space: nowrap;
+}
+
+.custom-inline-row input[type="number"] {
+  width: 72px;
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--t);
+}
+.custom-inline-row input[type="number"]:focus { border-color: var(--blue); }
+
+.custom-inline-row select {
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  outline: none;
+  background: var(--surface);
+  transition: border-color var(--t);
+}
+.custom-inline-row select:focus { border-color: var(--blue); }
+
+/* Quick-add popover: custom sub-type selector */
+.qrp-custom-subtype-sel {
+  width: 100%;
+  padding: 7px 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  outline: none;
+  background: var(--surface);
+  transition: border-color var(--t);
+}
+.qrp-custom-subtype-sel:focus { border-color: var(--blue); }
+
+/* Individual hidden sub-sections inside qrp-sub-custom */
+.qrp-custom-sub-inner {
+  padding-top: 4px;
+}
+
+/* Detail panel: custom sub-type select */
+#detail-custom-subtype {
+  width: 100%;
+  padding: 9px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--t);
+}
+#detail-custom-subtype:focus { border-color: var(--blue); }
+
+/* Detail panel: nthweek / nthweekday selects */
+#detail-custom-nthweek-n,
+#detail-custom-nthweekday-n,
+#detail-custom-nthweekday-day,
+#detail-custom-nthweekday-scope,
+#detail-custom-nthweekday-month {
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--t);
+}
+#detail-custom-nthweek-n:focus,
+#detail-custom-nthweekday-n:focus,
+#detail-custom-nthweekday-day:focus,
+#detail-custom-nthweekday-scope:focus,
+#detail-custom-nthweekday-month:focus { border-color: var(--blue); }
+
+/* monthday number input in detail panel */
+#detail-custom-monthday {
+  width: 72px;
+  padding: 6px 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color var(--t);
+}
+#detail-custom-monthday:focus { border-color: var(--blue); }
 
 /* ============================================================
    TIMELINE — clickable progress bar
@@ -2307,27 +2416,105 @@ body {
   border-color: rgba(192,61,85,0.5);
 }
 
-/* Mobile: hide top logout and style footer logout like the original */
+/* Mobile logout trigger (small blue x on sidebar footer) and menu */
+#mobile-logout-trigger {
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background var(--t), transform var(--t);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--light-blue);
+  font-weight: 600;
+}
+
+#mobile-logout-trigger::after {
+  content: '✕';
+}
+
+#mobile-logout-trigger:hover {
+  background: var(--blue);
+  transform: scale(1.15);
+}
+
+#mobile-logout-menu {
+  position: fixed;
+  bottom: auto;
+  right: auto;
+  top: 0;
+  left: 0;
+  width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  padding: 8px 0;
+  z-index: 100;
+  margin-bottom: 0;
+}
+
+#btn-logout-mobile {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background var(--t);
+}
+
+#btn-logout-mobile:hover {
+  background: var(--bg);
+  color: var(--danger);
+}
+
+/* Mobile: hide top logout and show mobile logout trigger on small screens */
 @media (max-width: 800px) {
   #btn-logout { display: none !important; }
-
-  #btn-logout-mobile {
-    width: auto;
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    background: rgba(255,152,169,0.12);
-    color: #FF98A9;
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    border: 1px solid rgba(255,152,169,0.28);
+  
+  #sidebar-footer {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0;
+    padding: 8px 10px;
   }
-
-  #btn-logout-mobile:hover {
-    background: rgba(192,61,85,0.25);
-    color: #fff;
-    border-color: rgba(192,61,85,0.5);
+  
+  #sidebar-buttons {
+    flex: 1;
+    gap: 4px;
   }
+  
+  #sidebar-buttons button {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+  
+  #mobile-logout-trigger {
+    display: flex !important;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    border-radius: 50%;
+    transition: background var(--t), transform var(--t);
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: var(--c3);
+    margin-left: 6px;
+  }
+  
+  #mobile-logout-trigger:hover {
+    background: var(--blue);
+    transform: scale(1.15);
+  }
+  
+  .auth-controls { display: none !important; }
 }
 
 

@@ -125,6 +125,40 @@ function getWeeklyPeriodKey(rec) {
   return 'questa_settimana';
 }
 
+/** Find the N-th occurrence of `weekday` (0=Sun) in `year`/`month` (0-indexed), on or after `onOrAfter` date. */
+function findNthWeekdayInMonth(year, month, weekday, nth, onOrAfter) {
+  let count = 0;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(year, month, day);
+    if (d.getDay() === weekday) {
+      count++;
+      if (count === nth) {
+        if (!onOrAfter || d >= onOrAfter) return d;
+        return null; // Exists but is before onOrAfter
+      }
+    }
+  }
+  return null;
+}
+
+/** Find the N-th occurrence of `weekday` in `year`, on or after `onOrAfter`. */
+function findNthWeekdayOfYear(year, weekday, nth, onOrAfter) {
+  let count = 0;
+  const d = new Date(year, 0, 1);
+  while (d.getFullYear() === year) {
+    if (d.getDay() === weekday) {
+      count++;
+      if (count === nth) {
+        if (!onOrAfter || d >= onOrAfter) return new Date(d);
+        return null;
+      }
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return null;
+}
+
 /**
  * Date of the NEXT occurrence of this recurrence, on or after `fromDate` (midnight local).
  */
@@ -133,8 +167,17 @@ function getNextOccurrenceDate(rec, fromDate) {
   const d = new Date(fromDate); d.setHours(0, 0, 0, 0);
 
   switch (rec.type) {
-    case 'daily':
-      return new Date(d);
+    case 'daily': {
+      // With optional day restriction (like old custom but stored as daily)
+      if (rec.days && rec.days.length > 0) {
+        for (let i = 0; i < 7; i++) {
+          const c = new Date(d); c.setDate(d.getDate() + i);
+          if (rec.days.includes(c.getDay())) return c;
+        }
+        return null;
+      }
+      return new Date(d); // Every day
+    }
 
     case 'weekly': {
       for (let i = 0; i < 7; i++) {
@@ -145,10 +188,60 @@ function getNextOccurrenceDate(rec, fromDate) {
     }
 
     case 'custom': {
-      const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
-      for (let i = 0; i < 7; i++) {
-        const c = new Date(d); c.setDate(d.getDate() + i);
-        if (days.includes(c.getDay())) return c;
+      if (!rec.subType) {
+        // Backward compat: old custom = weekday picker
+        const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
+        for (let i = 0; i < 7; i++) {
+          const c = new Date(d); c.setDate(d.getDate() + i);
+          if (days.includes(c.getDay())) return c;
+        }
+        return null;
+      }
+
+      if (rec.subType === 'monthDay') {
+        const dom = rec.monthDay || d.getDate();
+        let c = new Date(d.getFullYear(), d.getMonth(), dom);
+        if (c.getMonth() !== d.getMonth()) c = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        if (c >= d) return c;
+        let nm = d.getMonth() + 1, ny = d.getFullYear();
+        if (nm > 11) { nm = 0; ny++; }
+        c = new Date(ny, nm, dom);
+        if (c.getMonth() !== nm) c = new Date(ny, nm + 1, 0);
+        return c;
+      }
+
+      if (rec.subType === 'nthWeekOfMonth') {
+        const nthWeek = rec.nthWeek || 1;
+        const startDay = (nthWeek - 1) * 7 + 1;
+        // Try current month
+        let c = new Date(d.getFullYear(), d.getMonth(), startDay);
+        if (c.getMonth() === d.getMonth() && c >= d) return c;
+        // Try next month
+        const nm = d.getMonth() + 1 > 11 ? 0 : d.getMonth() + 1;
+        const ny = d.getMonth() + 1 > 11 ? d.getFullYear() + 1 : d.getFullYear();
+        c = new Date(ny, nm, startDay);
+        return c.getMonth() === nm ? c : null;
+      }
+
+      if (rec.subType === 'nthWeekday') {
+        const nthN    = rec.nthN  || 1;
+        const nthDay  = rec.nthDay  !== undefined ? rec.nthDay  : 0;
+        const scope   = rec.nthScope || 'month';
+        if (scope === 'month') {
+          return findNthWeekdayInMonth(d.getFullYear(), d.getMonth(), nthDay, nthN, d)
+            || findNthWeekdayInMonth(
+                d.getMonth() === 11 ? d.getFullYear() + 1 : d.getFullYear(),
+                d.getMonth() === 11 ? 0 : d.getMonth() + 1,
+                nthDay, nthN, null);
+        }
+        if (scope === 'year') {
+          if (rec.nthMonth !== undefined) {
+            return findNthWeekdayInMonth(d.getFullYear(), rec.nthMonth, nthDay, nthN, d)
+              || findNthWeekdayInMonth(d.getFullYear() + 1, rec.nthMonth, nthDay, nthN, null);
+          }
+          return findNthWeekdayOfYear(d.getFullYear(), nthDay, nthN, d)
+            || findNthWeekdayOfYear(d.getFullYear() + 1, nthDay, nthN, null);
+        }
       }
       return null;
     }
@@ -209,21 +302,33 @@ function getRecurrencePeriodKey(rec) {
 
 /**
  * ISO date of the START of the current recurrence "window".
+ * Accepts either a rec object or a legacy type string.
  */
-function getRecurrencePeriodStart(type) {
-  const now = new Date();
-  if (type === 'daily' || type === 'custom') {
-    return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  }
-  if (type === 'weekly') {
-    // Each scheduled day is a fresh occurrence → use today
-    return toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  }
-  if (type === 'monthly') {
-    return toIso(now.getFullYear(), now.getMonth() + 1, 1);
-  }
-  if (type === 'yearly') {
-    return toIso(now.getFullYear(), 1, 1);
+function getRecurrencePeriodStart(rec) {
+  const now  = new Date();
+  const type = (rec && typeof rec === 'object') ? rec.type : rec;
+  const todayIso = toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
+
+  if (type === 'daily' || type === 'weekly') return todayIso;
+
+  if (type === 'monthly') return toIso(now.getFullYear(), now.getMonth() + 1, 1);
+
+  if (type === 'yearly') return toIso(now.getFullYear(), 1, 1);
+
+  if (type === 'custom') {
+    if (!rec || typeof rec === 'string' || !rec.subType) return todayIso; // old custom or fallback
+    if (rec.subType === 'monthDay') return toIso(now.getFullYear(), now.getMonth() + 1, 1);
+    if (rec.subType === 'nthWeekOfMonth') {
+      const nthWeek  = rec.nthWeek || 1;
+      const startDay = Math.min((nthWeek - 1) * 7 + 1,
+        new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate());
+      return toIso(now.getFullYear(), now.getMonth() + 1, startDay);
+    }
+    if (rec.subType === 'nthWeekday') {
+      if (rec.nthScope === 'year') return toIso(now.getFullYear(), 1, 1);
+      return toIso(now.getFullYear(), now.getMonth() + 1, 1);
+    }
+    return todayIso;
   }
   return null;
 }
@@ -234,19 +339,30 @@ function getRecurrencePeriodStart(type) {
 function isRecurringCompletedForPeriod(task) {
   if (!task.completed || !task.lastCompletedDate) return false;
   const rec = task.recurrence;
-  // Weekly and custom: per-day completion
-  if (rec.type === 'weekly' || rec.type === 'custom') {
-    const today = new Date();
-    const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
-    // If today is not a scheduled day, consider it "not applicable" (show as hidden/done)
-    if (rec.type === 'weekly' && !isScheduledWeeklyDay(rec, today.getDay())) return true;
-    if (rec.type === 'custom') {
-      const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
-      if (!days.includes(today.getDay())) return true;
-    }
+  const today = new Date();
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  // Weekly: per-day
+  if (rec.type === 'weekly') {
+    if (!isScheduledWeeklyDay(rec, today.getDay())) return true; // not scheduled today
     return task.lastCompletedDate === todayIso;
   }
-  const periodStart = getRecurrencePeriodStart(rec.type);
+
+  // Daily (new: optional day restriction): per-day
+  if (rec.type === 'daily') {
+    if (rec.days && rec.days.length > 0 && !rec.days.includes(today.getDay())) return true; // not scheduled
+    return task.lastCompletedDate === todayIso;
+  }
+
+  // Old custom (backward compat — weekday picker): per-day
+  if (rec.type === 'custom' && !rec.subType) {
+    const days = rec.days && rec.days.length > 0 ? rec.days : [0,1,2,3,4,5,6];
+    if (!days.includes(today.getDay())) return true;
+    return task.lastCompletedDate === todayIso;
+  }
+
+  // All other types (monthly, yearly, custom with subType): per-period
+  const periodStart = getRecurrencePeriodStart(rec);
   if (!periodStart) return task.completed;
   return task.lastCompletedDate >= periodStart;
 }
@@ -256,31 +372,59 @@ function isRecurringCompletedForPeriod(task) {
  */
 function getRecurrenceLabel(rec) {
   if (!rec || !rec.type) return '';
-  const days = (rec.days && rec.days.length > 0) ? [...rec.days].sort((a,b)=>a-b) : [];
-  if (rec.type === 'daily')  return 'Ogni giorno';
-  if (rec.type === 'custom') {
+
+  if (rec.type === 'daily') {
+    const days = (rec.days && rec.days.length > 0) ? [...rec.days].sort((a,b)=>a-b) : [];
     if (days.length === 0 || days.length === 7) return 'Ogni giorno';
     if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Giorni feriali';
     if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Fine settimana';
     return days.map(d => DAY_NAMES_SHORT[d]).join(', ');
   }
-  if (rec.type === 'weekly') {
-    // days = INCLUDED days. Show which are excluded if not all 7.
-    if (days.length === 0 || days.length === 7) return 'Ogni settimana';
-    const excluded = [0,1,2,3,4,5,6].filter(d => !days.includes(d));
-    if (excluded.length === 0) return 'Ogni settimana';
-    if (excluded.length === 2 && excluded.includes(0) && excluded.includes(6)) return 'Giorni feriali';
-    return 'Ogni giorno tranne ' + excluded.map(d => DAY_NAMES_SHORT[d]).join(', ');
-  }
+
+  if (rec.type === 'weekly') return 'Ogni settimana';
+
   if (rec.type === 'monthly') {
     return rec.monthDay ? `Il ${rec.monthDay} di ogni mese` : 'Ogni mese';
   }
+
   if (rec.type === 'yearly') {
     if (rec.yearMonth !== undefined && rec.yearDay) {
       return `Ogni ${rec.yearDay} ${MONTHS_IT_SHORT[rec.yearMonth]}`;
     }
     return 'Ogni anno';
   }
+
+  if (rec.type === 'custom') {
+    if (!rec.subType) {
+      // Backward compat: old custom with weekday picker
+      const days = (rec.days && rec.days.length > 0) ? [...rec.days].sort((a,b)=>a-b) : [];
+      if (days.length === 0 || days.length === 7) return 'Ogni giorno';
+      if (days.length === 5 && !days.includes(0) && !days.includes(6)) return 'Giorni feriali';
+      if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Fine settimana';
+      return days.map(d => DAY_NAMES_SHORT[d]).join(', ');
+    }
+    if (rec.subType === 'monthDay') {
+      return rec.monthDay ? `Il ${rec.monthDay} di ogni mese` : 'Personalizza';
+    }
+    if (rec.subType === 'nthWeekOfMonth') {
+      const ordinals = ['','1ª','2ª','3ª','4ª','5ª'];
+      return `${ordinals[rec.nthWeek] || 'N-esima'} settimana del mese`;
+    }
+    if (rec.subType === 'nthWeekday') {
+      const ordinals = ['','1°','2°','3°','4°'];
+      const dayNames = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+      const nStr  = ordinals[rec.nthN || 1] || `${rec.nthN}°`;
+      const dayStr = dayNames[rec.nthDay !== undefined ? rec.nthDay : 0];
+      const scope  = rec.nthScope || 'month';
+      if (scope === 'month') return `${nStr} ${dayStr} del mese`;
+      if (scope === 'year') {
+        if (rec.nthMonth !== undefined) return `${nStr} ${dayStr} di ${MONTHS_IT_SHORT[rec.nthMonth]}`;
+        return `${nStr} ${dayStr} dell'anno`;
+      }
+    }
+    return 'Personalizza';
+  }
+
   return '';
 }
 
@@ -585,10 +729,11 @@ async function autoAdvanceOverdueTasks(listId) {
     if (isRecurringTask(task)) {
       const rec = task.recurrence;
       if (task.completed) {
-        const periodStart = getRecurrencePeriodStart(rec.type);
+        const periodStart = getRecurrencePeriodStart(rec);
         const shouldReset = !task.lastCompletedDate || task.lastCompletedDate < periodStart;
-        // For custom (specific weekdays): also reset if today is a new scheduled day
-        const customShouldReset = rec.type === 'custom' && !isRecurringCompletedForPeriod(task);
+        // Per-day types (daily with/without days, old custom): also reset on new scheduled day
+        const isPerDay = rec.type === 'weekly' || rec.type === 'daily' || (rec.type === 'custom' && !rec.subType);
+        const customShouldReset = isPerDay && !isRecurringCompletedForPeriod(task);
         if (shouldReset || customShouldReset) {
           const correctPeriodKey = getRecurrencePeriodKey(rec);
           const correctPeriod = correctPeriodKey ? getPeriod(correctPeriodKey) : null;
@@ -753,6 +898,8 @@ const el = {
   btnOverlayLogin:      document.getElementById('overlay-login'),
   btnLogoutMobile:      document.getElementById('btn-logout-mobile'),
   btnLoginMobile:       document.getElementById('btn-login-mobile'),
+  mobileLogoutTrigger:  document.getElementById('mobile-logout-trigger'),
+  mobileLogoutMenu:     document.getElementById('mobile-logout-menu'),
   authOverlay:          document.getElementById('auth-overlay'),
   detailDeadline:       document.getElementById('detail-deadline'),
   detailPeriod:         document.getElementById('detail-period'),
@@ -841,6 +988,7 @@ async function loginWithGoogle() {
 }
 
 async function logoutUser() {
+  if (el.mobileLogoutMenu) el.mobileLogoutMenu.classList.add('hidden');
   try { await firebase.auth().signOut(); }
   catch (err) { console.error(err); }
 }
@@ -1596,15 +1744,25 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
 
 function _showDetailRecurrenceSub(type) {
   const daysWrap    = document.getElementById('detail-recurrence-days-wrap');
-  const monthlyWrap = document.getElementById('detail-recurrence-monthly-wrap');
   const yearlyWrap  = document.getElementById('detail-recurrence-yearly-wrap');
-  const labelEl     = document.getElementById('detail-recurrence-days-label');
-  if (daysWrap)    daysWrap.classList.toggle('hidden',    !(type === 'custom' || type === 'weekly'));
-  if (monthlyWrap) monthlyWrap.classList.toggle('hidden', type !== 'monthly');
-  if (yearlyWrap)  yearlyWrap.classList.toggle('hidden',  type !== 'yearly');
-  if (labelEl) {
-    labelEl.textContent = type === 'weekly' ? 'Escludi giorni (clicca per deselezionare)' : 'Nei giorni';
+  const customWrap  = document.getElementById('detail-recurrence-custom-wrap');
+  if (daysWrap)   daysWrap.classList.toggle('hidden',   type !== 'daily');
+  if (yearlyWrap) yearlyWrap.classList.toggle('hidden',  type !== 'yearly');
+  if (customWrap) customWrap.classList.toggle('hidden',  type !== 'custom');
+  // Hide all custom sub-inputs, then show the correct one
+  ['detail-custom-monthday-wrap','detail-custom-nthweek-wrap','detail-custom-nthweekday-wrap']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+  if (type === 'custom') {
+    const subTypeEl = document.getElementById('detail-custom-subtype');
+    if (subTypeEl) _showDetailCustomSub(subTypeEl.value);
   }
+}
+
+function _showDetailCustomSub(subType) {
+  const map = { monthDay: 'detail-custom-monthday-wrap', nthWeekOfMonth: 'detail-custom-nthweek-wrap', nthWeekday: 'detail-custom-nthweekday-wrap' };
+  Object.values(map).forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+  const target = map[subType];
+  if (target) { const el = document.getElementById(target); if (el) el.classList.remove('hidden'); }
 }
 
 function renderRecurrenceUI(task) {
@@ -1616,30 +1774,49 @@ function renderRecurrenceUI(task) {
 
   _showDetailRecurrenceSub(rec ? rec.type : '');
 
-  // Day buttons
-  // weekly: rec.days = INCLUDED days (empty = all). Active = included. Clicking deselects.
-  // custom: rec.days = included days. Active = included.
-  if (rec && rec.type === 'weekly') {
-    const includedDays = (rec.days && rec.days.length > 0) ? rec.days : [0,1,2,3,4,5,6];
+  // Day buttons — shown only for 'daily'; all active by default
+  if (rec && rec.type === 'daily') {
+    const included = (rec.days && rec.days.length > 0) ? rec.days : [0,1,2,3,4,5,6];
     document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
-      btn.classList.toggle('active', includedDays.includes(parseInt(btn.dataset.day, 10)));
+      btn.classList.toggle('active', included.includes(parseInt(btn.dataset.day, 10)));
     });
   } else {
-    const activeDays = (rec && rec.days) ? rec.days : [];
-    document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
-      btn.classList.toggle('active', activeDays.includes(parseInt(btn.dataset.day, 10)));
-    });
+    document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => btn.classList.remove('active'));
   }
-
-  // Monthly day input
-  const monthlyInput = document.getElementById('detail-recurrence-monthly-day');
-  if (monthlyInput) monthlyInput.value = (rec && rec.monthDay) ? rec.monthDay : '';
 
   // Yearly inputs
   const yearlyDay   = document.getElementById('detail-recurrence-yearly-day');
   const yearlyMonth = document.getElementById('detail-recurrence-yearly-month');
   if (yearlyDay)   yearlyDay.value   = (rec && rec.yearDay   !== undefined) ? rec.yearDay   : '';
   if (yearlyMonth) yearlyMonth.value = (rec && rec.yearMonth !== undefined) ? rec.yearMonth : '0';
+
+  // Custom sub-type
+  if (rec && rec.type === 'custom') {
+    const subTypeEl = document.getElementById('detail-custom-subtype');
+    if (subTypeEl) subTypeEl.value = rec.subType || 'monthDay';
+    _showDetailCustomSub(rec.subType || 'monthDay');
+
+    if (rec.subType === 'monthDay') {
+      const inp = document.getElementById('detail-custom-monthday');
+      if (inp) inp.value = rec.monthDay || '';
+    }
+    if (rec.subType === 'nthWeekOfMonth') {
+      const sel = document.getElementById('detail-custom-nthweek-n');
+      if (sel) sel.value = rec.nthWeek || 1;
+    }
+    if (rec.subType === 'nthWeekday') {
+      const nEl     = document.getElementById('detail-custom-nthweekday-n');
+      const dayEl   = document.getElementById('detail-custom-nthweekday-day');
+      const scopeEl = document.getElementById('detail-custom-nthweekday-scope');
+      const monthEl = document.getElementById('detail-custom-nthweekday-month');
+      const monthWrap = document.getElementById('detail-custom-nthweekday-month-wrap');
+      if (nEl)     nEl.value     = rec.nthN  || 1;
+      if (dayEl)   dayEl.value   = rec.nthDay  !== undefined ? rec.nthDay  : 1;
+      if (scopeEl) scopeEl.value = rec.nthScope || 'month';
+      if (monthWrap) monthWrap.classList.toggle('hidden', rec.nthScope !== 'year');
+      if (monthEl && rec.nthMonth !== undefined) monthEl.value = rec.nthMonth;
+    }
+  }
 
   const hintEl = document.getElementById('detail-recurrence-hint');
   if (hintEl) hintEl.textContent = rec ? getRecurrenceLabel(rec) : '';
@@ -1652,26 +1829,44 @@ function _readDetailRecurrence() {
 
   const rec = { type };
 
-  if (type === 'custom') {
-    rec.days = [...document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active')]
-      .map(b => parseInt(b.dataset.day, 10));
-  }
-  if (type === 'weekly') {
-    // Active buttons = included days. All 7 active = every day (store as empty = all).
+  if (type === 'daily') {
     const active = [...document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn.active')]
       .map(b => parseInt(b.dataset.day, 10));
-    rec.days = active.length === 7 ? [] : active; // empty means all days
+    rec.days = active.length === 7 ? [] : active; // empty = all days
   }
-  if (type === 'monthly') {
-    const v = parseInt(document.getElementById('detail-recurrence-monthly-day')?.value, 10);
-    rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
-  }
+
   if (type === 'yearly') {
     const d = parseInt(document.getElementById('detail-recurrence-yearly-day')?.value, 10);
     const m = parseInt(document.getElementById('detail-recurrence-yearly-month')?.value, 10);
     rec.yearDay   = (!isNaN(d) && d >= 1 && d <= 31) ? d : null;
     rec.yearMonth = !isNaN(m) ? m : null;
   }
+
+  if (type === 'custom') {
+    const subType = document.getElementById('detail-custom-subtype')?.value || 'monthDay';
+    rec.subType = subType;
+    if (subType === 'monthDay') {
+      const v = parseInt(document.getElementById('detail-custom-monthday')?.value, 10);
+      rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
+    }
+    if (subType === 'nthWeekOfMonth') {
+      const v = parseInt(document.getElementById('detail-custom-nthweek-n')?.value, 10);
+      rec.nthWeek = !isNaN(v) ? v : 1;
+    }
+    if (subType === 'nthWeekday') {
+      const n    = parseInt(document.getElementById('detail-custom-nthweekday-n')?.value, 10);
+      const day  = parseInt(document.getElementById('detail-custom-nthweekday-day')?.value, 10);
+      const scope = document.getElementById('detail-custom-nthweekday-scope')?.value || 'month';
+      rec.nthN     = !isNaN(n)   ? n   : 1;
+      rec.nthDay   = !isNaN(day) ? day : 0;
+      rec.nthScope = scope;
+      if (scope === 'year') {
+        const m = parseInt(document.getElementById('detail-custom-nthweekday-month')?.value, 10);
+        if (!isNaN(m)) rec.nthMonth = m;
+      }
+    }
+  }
+
   return rec;
 }
 
@@ -2035,26 +2230,20 @@ function bindEvents() {
   const btnQrp     = document.getElementById('btn-quick-recurrence');
   const qrpSummary = document.getElementById('qrp-summary');
 
-  // Build day-picker buttons into both qrp-days-weekly and qrp-days-custom
-  ['qrp-days-weekly','qrp-days-custom'].forEach(id => {
-    const wrap = document.getElementById(id);
-    if (!wrap) return;
+  // Build day-picker buttons for daily inside the quick-add popover
+  const qrpDailyWrap = document.getElementById('qrp-days-daily');
+  if (qrpDailyWrap) {
     [[1,'Lun'],[2,'Mar'],[3,'Mer'],[4,'Gio'],[5,'Ven'],[6,'Sab'],[0,'Dom']].forEach(([day, label]) => {
       const btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'recurrence-day-btn';
+      btn.type = 'button'; btn.className = 'recurrence-day-btn active'; // start all active
       btn.dataset.day = day; btn.textContent = label;
       btn.addEventListener('click', e => {
         e.stopPropagation();
-        btn.classList.toggle('active'); // both weekly and custom: toggle
+        btn.classList.toggle('active');
         buildQuickRecurrence();
       });
-      wrap.appendChild(btn);
+      qrpDailyWrap.appendChild(btn);
     });
-  });
-
-  // When user selects "weekly" type, initialise all 7 days as active
-  function initWeeklyDays() {
-    document.querySelectorAll('#qrp-days-weekly .recurrence-day-btn').forEach(b => b.classList.add('active'));
   }
 
   function buildQuickRecurrence() {
@@ -2063,25 +2252,36 @@ function bindEvents() {
     if (!type) { quickRecurrence = null; }
     else {
       const rec = { type };
-      if (type === 'custom') {
-        rec.days = [...document.querySelectorAll('#qrp-days-custom .recurrence-day-btn.active')]
+      if (type === 'daily') {
+        const active = [...document.querySelectorAll('#qrp-days-daily .recurrence-day-btn.active')]
           .map(b => parseInt(b.dataset.day, 10));
-      }
-      if (type === 'weekly') {
-        // Active buttons = INCLUDED days. All 7 = empty (every day).
-        const active = [...document.querySelectorAll('#qrp-days-weekly .recurrence-day-btn.active')]
-          .map(b => parseInt(b.dataset.day, 10));
-        rec.days = active.length === 7 ? [] : active;
-      }
-      if (type === 'monthly') {
-        const v = parseInt(document.getElementById('qrp-monthly-day')?.value, 10);
-        rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
+        rec.days = active.length === 7 ? [] : active; // empty = all days
       }
       if (type === 'yearly') {
         const d = parseInt(document.getElementById('qrp-yearly-day')?.value, 10);
         const m = parseInt(document.getElementById('qrp-yearly-month')?.value, 10);
         rec.yearDay   = (!isNaN(d) && d >= 1 && d <= 31) ? d : null;
         rec.yearMonth = (!isNaN(m)) ? m : null;
+      }
+      if (type === 'custom') {
+        const subType = document.getElementById('qrp-custom-subtype')?.value || 'monthDay';
+        rec.subType = subType;
+        if (subType === 'monthDay') {
+          const v = parseInt(document.getElementById('qrp-custom-monthday-n')?.value, 10);
+          rec.monthDay = (!isNaN(v) && v >= 1 && v <= 31) ? v : null;
+        }
+        if (subType === 'nthWeekOfMonth') {
+          const v = parseInt(document.getElementById('qrp-custom-nthweek-n')?.value, 10);
+          rec.nthWeek = !isNaN(v) ? v : 1;
+        }
+        if (subType === 'nthWeekday') {
+          const n   = parseInt(document.getElementById('qrp-custom-nthweekday-n')?.value, 10);
+          const day = parseInt(document.getElementById('qrp-custom-nthweekday-day')?.value, 10);
+          const scope = document.getElementById('qrp-custom-nthweekday-scope')?.value || 'month';
+          rec.nthN     = !isNaN(n)   ? n   : 1;
+          rec.nthDay   = !isNaN(day) ? day : 0;
+          rec.nthScope = scope;
+        }
       }
       quickRecurrence = rec;
     }
@@ -2097,10 +2297,17 @@ function bindEvents() {
   }
 
   function showQrpSub(type) {
-    ['weekly','monthly','yearly','custom'].forEach(t => {
+    ['daily', 'yearly', 'custom'].forEach(t => {
       const el = document.getElementById('qrp-sub-' + t);
       if (el) el.classList.toggle('hidden', t !== type);
     });
+  }
+
+  function showQrpCustomSub(subType) {
+    const map = { monthDay: 'qrp-custom-monthday', nthWeekOfMonth: 'qrp-custom-nthweek', nthWeekday: 'qrp-custom-nthweekday' };
+    Object.values(map).forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
+    const target = map[subType];
+    if (target) { const el = document.getElementById(target); if (el) el.classList.remove('hidden'); }
   }
 
   if (btnQrp && qrpEl) {
@@ -2115,18 +2322,35 @@ function bindEvents() {
         qrpEl.querySelectorAll('.qrp-type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         showQrpSub(btn.dataset.type);
-        if (btn.dataset.type === 'weekly') initWeeklyDays();
+        if (btn.dataset.type === 'custom') {
+          const subTypeEl = document.getElementById('qrp-custom-subtype');
+          showQrpCustomSub(subTypeEl ? subTypeEl.value : 'monthDay');
+        }
         buildQuickRecurrence();
       });
     });
-    // Monthly day input
-    const qrpMonthly = document.getElementById('qrp-monthly-day');
-    if (qrpMonthly) qrpMonthly.addEventListener('input', e => { e.stopPropagation(); buildQuickRecurrence(); });
+    // Custom sub-type select
+    const qrpCustomSubtype = document.getElementById('qrp-custom-subtype');
+    if (qrpCustomSubtype) {
+      qrpCustomSubtype.addEventListener('change', e => {
+        e.stopPropagation();
+        showQrpCustomSub(qrpCustomSubtype.value);
+        buildQuickRecurrence();
+      });
+    }
     // Yearly inputs
     ['qrp-yearly-day','qrp-yearly-month'].forEach(id => {
       const inp = document.getElementById(id);
       if (inp) inp.addEventListener('change', e => { e.stopPropagation(); buildQuickRecurrence(); });
     });
+    // Custom inputs
+    ['qrp-custom-monthday-n','qrp-custom-nthweek-n','qrp-custom-nthweekday-n',
+     'qrp-custom-nthweekday-day','qrp-custom-nthweekday-scope'].forEach(id => {
+      const inp = document.getElementById(id);
+      if (inp) inp.addEventListener('change', e => { e.stopPropagation(); buildQuickRecurrence(); });
+    });
+    const qrpMonthlyN = document.getElementById('qrp-custom-monthday-n');
+    if (qrpMonthlyN) qrpMonthlyN.addEventListener('input', e => { e.stopPropagation(); buildQuickRecurrence(); });
     // Close on outside click
     document.addEventListener('click', e => {
       if (!qrpEl.classList.contains('hidden') && !qrpEl.contains(e.target) && e.target !== btnQrp) {
@@ -2194,8 +2418,8 @@ function bindEvents() {
     recTypeEl.addEventListener('change', () => {
       const type = recTypeEl.value;
       _showDetailRecurrenceSub(type);
-      if (type === 'weekly') {
-        // Default: all days included (all active)
+      if (type === 'daily') {
+        // Default: all days selected = every day
         document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.add('active'));
       } else {
         document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.remove('active'));
@@ -2204,7 +2428,7 @@ function bindEvents() {
     });
   }
 
-  // Day buttons in detail panel — both weekly and custom use toggle (multi)
+  // Day buttons in detail panel — only used for 'daily'; toggle individual days
   document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       btn.classList.toggle('active');
@@ -2212,9 +2436,36 @@ function bindEvents() {
     });
   });
 
-  // Monthly day input in detail panel
-  const detailMonthlyDay = document.getElementById('detail-recurrence-monthly-day');
-  if (detailMonthlyDay) detailMonthlyDay.addEventListener('change', saveRecurrence);
+  // Custom sub-type select in detail panel
+  const detailCustomSubtype = document.getElementById('detail-custom-subtype');
+  if (detailCustomSubtype) {
+    detailCustomSubtype.addEventListener('change', () => {
+      _showDetailCustomSub(detailCustomSubtype.value);
+      saveRecurrence();
+    });
+  }
+
+  // Custom sub-inputs in detail panel
+  ['detail-custom-monthday','detail-custom-nthweek-n',
+   'detail-custom-nthweekday-n','detail-custom-nthweekday-day',
+   'detail-custom-nthweekday-scope'].forEach(id => {
+    const inp = document.getElementById(id);
+    if (inp) inp.addEventListener('change', saveRecurrence);
+  });
+  const detailMonthDayInp = document.getElementById('detail-custom-monthday');
+  if (detailMonthDayInp) detailMonthDayInp.addEventListener('input', saveRecurrence);
+
+  // Scope change: show/hide the month picker for nthWeekday
+  const detailNthScope = document.getElementById('detail-custom-nthweekday-scope');
+  if (detailNthScope) {
+    detailNthScope.addEventListener('change', () => {
+      const monthWrap = document.getElementById('detail-custom-nthweekday-month-wrap');
+      if (monthWrap) monthWrap.classList.toggle('hidden', detailNthScope.value !== 'year');
+      saveRecurrence();
+    });
+  }
+  const detailNthMonth = document.getElementById('detail-custom-nthweekday-month');
+  if (detailNthMonth) detailNthMonth.addEventListener('change', saveRecurrence);
 
   // Yearly inputs in detail panel
   ['detail-recurrence-yearly-day', 'detail-recurrence-yearly-month'].forEach(id => {
@@ -2334,6 +2585,32 @@ function bindEvents() {
   if (el.btnLogoutMobile) el.btnLogoutMobile.addEventListener('click', logoutUser);
   if (el.btnLoginMobile)  el.btnLoginMobile.addEventListener('click', loginWithGoogle);
   if (el.btnOverlayLogin) el.btnOverlayLogin.addEventListener('click', loginWithGoogle);
+
+  // ── Mobile logout trigger (show/hide menu) ───────────────────
+  if (el.mobileLogoutTrigger) {
+    el.mobileLogoutTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (el.mobileLogoutMenu.classList.contains('hidden')) {
+        // Show and position menu below the trigger
+        const triggerRect = el.mobileLogoutTrigger.getBoundingClientRect();
+        el.mobileLogoutMenu.classList.remove('hidden');
+        // Position below the trigger, aligned to trigger's right edge
+        el.mobileLogoutMenu.style.top = (triggerRect.bottom + 8) + 'px';
+        el.mobileLogoutMenu.style.left = Math.max(10, triggerRect.right - 120) + 'px';
+      } else {
+        el.mobileLogoutMenu.classList.add('hidden');
+      }
+    });
+  }
+
+  // Close mobile logout menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (el.mobileLogoutMenu && !el.mobileLogoutMenu.classList.contains('hidden')) {
+      if (!el.mobileLogoutTrigger.contains(e.target) && !el.mobileLogoutMenu.contains(e.target)) {
+        el.mobileLogoutMenu.classList.add('hidden');
+      }
+    }
+  });
 
   // ── Sidebar search ───────────────────────────────────────────
   if (el.sidebarSearch) {
