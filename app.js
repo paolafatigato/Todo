@@ -309,7 +309,16 @@ function getRecurrencePeriodStart(rec) {
   const type = (rec && typeof rec === 'object') ? rec.type : rec;
   const todayIso = toIso(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
-  if (type === 'daily' || type === 'weekly') return todayIso;
+  if (type === 'daily') return todayIso;
+
+  if (type === 'weekly') {
+    // Start of current ISO week (Monday)
+    const d = new Date(now);
+    const day = d.getDay();
+    const daysToMon = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + daysToMon);
+    return toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  }
 
   if (type === 'monthly') return toIso(now.getFullYear(), now.getMonth() + 1, 1);
 
@@ -342,10 +351,10 @@ function isRecurringCompletedForPeriod(task) {
   const today = new Date();
   const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
 
-  // Weekly: per-day
+  // Weekly: per-week — completato in qualsiasi giorno della settimana corrente conta
   if (rec.type === 'weekly') {
-    if (!isScheduledWeeklyDay(rec, today.getDay())) return true; // not scheduled today
-    return task.lastCompletedDate === todayIso;
+    const weekStart = getRecurrencePeriodStart(rec); // lunedì di questa settimana
+    return !!(task.lastCompletedDate && task.lastCompletedDate >= weekStart);
   }
 
   // Daily (new: optional day restriction): per-day
@@ -462,13 +471,44 @@ const nextPeriodKey = key => {
 };
 
 /**
+ * Effective period key for display/sorting: takes the MORE URGENT (lower index)
+ * of the declared plannedPeriod and the period implied by the task's deadline.
+ * This ensures a task with deadline "19 marzo" shows up in "questa settimana"
+ * even if its plannedPeriod is "prossimo mese" or blank.
+ */
+function effectivePeriodKey(task) {
+  const declared = task.plannedPeriod && task.plannedPeriod !== 'ogni_giorno'
+    ? task.plannedPeriod : null;
+
+  let deadlineKey = null;
+  if (task.deadline && !task.completed) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const [dy, dm, dd] = task.deadline.split('-').map(Number);
+    const diffDays = Math.round((new Date(dy, dm - 1, dd) - today) / 86400000);
+    deadlineKey = periodKeyForDaysAhead(diffDays);
+  }
+
+  if (!declared && !deadlineKey) return task.plannedPeriod || null;
+  if (!declared) return deadlineKey;
+  if (!deadlineKey) return declared;
+
+  // Both exist: pick the more urgent (lower PERIODS index)
+  const di = PERIODS.findIndex(p => p.key === declared);
+  const ki = PERIODS.findIndex(p => p.key === deadlineKey);
+  if (di < 0) return deadlineKey;
+  if (ki < 0) return declared;
+  return ki < di ? deadlineKey : declared;
+}
+
+/**
  * Numeric sort key for a task's planned period.
  * No period → sorted to the very end (9999).
  */
 function periodSortKey(task) {
-  if (!task.plannedPeriod) return 9999;
-  if (task.plannedPeriod === 'ogni_giorno') return 0; // appears with 'oggi' in sorted order
-  const idx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
+  if (task.plannedPeriod === 'ogni_giorno') return 0; // appears with 'oggi'
+  const key = effectivePeriodKey(task);
+  if (!key) return 9999;
+  const idx = PERIODS.findIndex(p => p.key === key);
   return idx >= 0 ? idx : 9999;
 }
 
@@ -576,7 +616,7 @@ function isCompletedToday(task) {
 // DATE HELPERS
 // ============================================================
 
-function endOfDay(date)  { const d = new Date(date); d.setHours(23,59,59,999); return d.getTime(); }
+function endOfDay(date)  { const d = new Date(date); d.setDate(d.getDate() + 1); d.setHours(0,59,59,999); return d.getTime(); }
 function addDays(date,n) { const d = new Date(date); d.setDate(d.getDate()+n); return d; }
 function addMonths(date,n){ const d = new Date(date); d.setMonth(d.getMonth()+n); return d; }
 function addYears(date,n) { const d = new Date(date); d.setFullYear(d.getFullYear()+n); return d; }
@@ -645,24 +685,24 @@ function getOverdueColor(task) {
 
 function startOfDayMs(date) {
   const d = new Date(date);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 1, 0, 0, 0).getTime();
 }
 
-/** Monday of the week containing `date`, midnight */
+/** Monday of the week containing `date`, 01:00 */
 function startOfWeekMs(date) {
   const d = new Date(date);
   const day = d.getDay(); // 0=Sun
   const daysToMon = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + daysToMon);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 1, 0, 0, 0).getTime();
 }
 
-/** First day of the month of `date`, midnight */
+/** First day of the month of `date`, 01:00 */
 function startOfMonthMs(date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+  return new Date(date.getFullYear(), date.getMonth(), 1, 1, 0, 0, 0).getTime();
 }
 
-/** First day of the NEXT meteorological season */
+/** First day of the NEXT meteorological season, 01:00 */
 function startOfNextSeasonMs(date) {
   const m = date.getMonth();
   let cur = m <= 1 || m === 11 ? 0 : m <= 4 ? 1 : m <= 7 ? 2 : 3;
@@ -671,14 +711,14 @@ function startOfNextSeasonMs(date) {
   const startMonth = firstMonths[next];
   let startYear = date.getFullYear();
   if (startMonth <= m) startYear++;
-  return new Date(startYear, startMonth, 1).getTime();
+  return new Date(startYear, startMonth, 1, 1, 0, 0, 0).getTime();
 }
 
-/** September 1 of the current or next Italian school year */
+/** September 1 of the current or next Italian school year, 01:00 */
 function startOfSchoolYearMs(date) {
   const y = date.getFullYear(), m = date.getMonth();
   const startYear = m >= 8 ? y : y - 1; // Sep=8
-  return new Date(startYear, 8, 1).getTime(); // Sep 1
+  return new Date(startYear, 8, 1, 1, 0, 0, 0).getTime(); // Sep 1
 }
 
 /**
@@ -732,7 +772,7 @@ async function autoAdvanceOverdueTasks(listId) {
         const periodStart = getRecurrencePeriodStart(rec);
         const shouldReset = !task.lastCompletedDate || task.lastCompletedDate < periodStart;
         // Per-day types (daily with/without days, old custom): also reset on new scheduled day
-        const isPerDay = rec.type === 'weekly' || rec.type === 'daily' || (rec.type === 'custom' && !rec.subType);
+        const isPerDay = rec.type === 'daily' || (rec.type === 'custom' && !rec.subType);
         const customShouldReset = isPerDay && !isRecurringCompletedForPeriod(task);
         if (shouldReset || customShouldReset) {
           const correctPeriodKey = getRecurrencePeriodKey(rec);
@@ -741,6 +781,7 @@ async function autoAdvanceOverdueTasks(listId) {
             completed: false, lastCompletedDate: null, overdue: false,
             plannedPeriod: correctPeriodKey || task.plannedPeriod,
             plannedPeriodUntil: correctPeriod ? correctPeriod.getEnd() : task.plannedPeriodUntil,
+            milestones: task.milestones ? task.milestones.map(m => ({ ...m, done: false })) : null,
           };
           batch.update(tasksRef(listId).doc(task.id), reset);
           Object.assign(task, reset);
@@ -767,7 +808,11 @@ async function autoAdvanceOverdueTasks(listId) {
     // ── Daily recurring: reset if completed on a previous day ──────
     if (task.plannedPeriod === 'ogni_giorno' && task.completed) {
       if (task.lastCompletedDate !== todayIso) {
-        const reset = { completed: false, lastCompletedDate: null };
+        const reset = {
+          completed: false,
+          lastCompletedDate: null,
+          milestones: task.milestones ? task.milestones.map(m => ({ ...m, done: false })) : null,
+        };
         batch.update(tasksRef(listId).doc(task.id), reset);
         Object.assign(task, reset);
         hasChanges = true;
@@ -776,32 +821,39 @@ async function autoAdvanceOverdueTasks(listId) {
     }
 
     // ── Auto-advance toward present (never forward) ─────────────────
-    // Skip tasks without a period, daily tasks, completed tasks, or
-    // tasks without a known expiry timestamp.
-    if (!task.plannedPeriod || task.plannedPeriod === 'ogni_giorno' || task.completed || !task.plannedPeriodUntil) return;
+    // Skip completed tasks and daily legacy tasks.
+    if (!task.plannedPeriod || task.plannedPeriod === 'ogni_giorno' || task.completed) return;
 
     const currentIdx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
     if (currentIdx <= 0) return; // already at 'oggi' or unknown period
 
-    const daysLeft = (task.plannedPeriodUntil - now) / 86400000; // fractional days
-
-    // Determine the *most specific* (closest-to-now) period that the
-    // remaining time still "fits inside" — i.e., whose end is >= now+daysLeft.
-    // We advance only if that period is strictly closer than the current one.
     let targetPeriod = null;
 
-    if (daysLeft <= 0) {
-      // Expired → oggi
-      targetPeriod = PERIODS[0]; // 'oggi'
-    } else if (daysLeft <= 1 && currentIdx > 1) {
-      // Less than 1 day left → domani
-      targetPeriod = PERIODS[1]; // 'domani'
-    } else if (daysLeft <= 2 && currentIdx > 1) {
-      // ≤ 2 days left and not already domani/oggi → domani
-      targetPeriod = PERIODS[1];
-    } else if (daysLeft <= 7 && currentIdx > 2) {
-      // ≤ 7 days left and not already questa_settimana or closer → questa_settimana
-      targetPeriod = PERIODS[2]; // 'questa_settimana'
+    // 1) Period-expiry based advance (existing logic, requires plannedPeriodUntil)
+    if (task.plannedPeriodUntil) {
+      const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
+      if      (daysLeft <= 0 )               targetPeriod = PERIODS[0]; // oggi
+      else if (daysLeft <= 2 && currentIdx > 1) targetPeriod = PERIODS[1]; // domani
+      else if (daysLeft <= 7 && currentIdx > 2) targetPeriod = PERIODS[2]; // questa_settimana
+    }
+
+    // 2) Deadline-based advance: if deadline is approaching sooner than the
+    //    current period, pull the task into the matching closer period.
+    if (task.deadline) {
+      const [dy, dm, dd] = task.deadline.split('-').map(Number);
+      const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const deadlineDay = new Date(dy, dm - 1, dd);
+      const diffDays = Math.round((deadlineDay - todayMid) / 86400000);
+      const deadlinePeriodKey = periodKeyForDaysAhead(diffDays);
+      const deadlineIdx = PERIODS.findIndex(p => p.key === deadlinePeriodKey);
+      if (deadlineIdx >= 0 && deadlineIdx < currentIdx) {
+        const currentTargetIdx = targetPeriod
+          ? PERIODS.findIndex(p => p.key === targetPeriod.key)
+          : currentIdx;
+        if (deadlineIdx < currentTargetIdx) {
+          targetPeriod = PERIODS[deadlineIdx];
+        }
+      }
     }
 
     if (!targetPeriod) return;
@@ -832,9 +884,9 @@ const state = {
   pendingTaskId: null,       // task to open after a list finishes loading
 };
 
-let currentUserUid    = null;
-let unsubscribeLists  = null;
-let quickRecurrence   = null; // recurrence set via the quick-add popover
+let currentUserUid      = null;
+let unsubscribeLists    = null;
+let quickRecurrence     = null; // recurrence set via the quick-add popover
 
 // Calendar state — persists across month navigation
 const calState = {
@@ -1129,6 +1181,153 @@ async function deleteMilestone(task, idx) {
   renderMilestones(task, getListColorHex(list));
 }
 
+
+// ============================================================
+// DEFAULT LISTS — created once for brand-new users
+// ============================================================
+
+/** Returns the top-level user document reference. */
+const userDocRef = () => db.collection('users').doc(currentUserUid);
+
+/**
+ * Called once per user per device (checked via localStorage).
+ * Creates four starter lists with sample tasks so every user
+ * — new or returning — gets them on their first login after this deploy.
+ *
+ * Also checks if lists with these names already exist on Firestore
+ * (e.g., created on another device) to avoid duplication.
+ */
+async function seedDefaultListsIfNeeded() {
+  const flagKey = `defaultListsSeeded_${currentUserUid}`;
+  if (localStorage.getItem(flagKey)) return; // already seeded on this device
+  
+  const defaultNames = [
+    '🪄 Come usare Todo',
+    '🏠 Cose di casa',
+    '💼 Lavoro',
+    '📖 Libri da leggere',
+  ];
+
+  try {
+    // Check if any default list already exists on Firestore
+    const listsSnap = await listsRef().get();
+    const existingNames = listsSnap.docs.map(d => d.data().name || '');
+    const alreadyExists = defaultNames.some(name => existingNames.includes(name));
+    
+    if (!alreadyExists) {
+      // Only create if none of them exist
+      await createDefaultLists();
+    }
+    
+    localStorage.setItem(flagKey, '1'); // mark after successful check
+  } catch (err) {
+    console.warn('seed failed', err);
+  }
+}
+
+async function createDefaultLists() {
+  const batch = db.batch();
+  const now   = firebase.firestore.FieldValue.serverTimestamp();
+  const ref   = listsRef();
+
+  const bookMilestones = () => [
+    { id: 'm1', name: 'Comprare', done: false },
+    { id: 'm2', name: 'Iniziare', done: false },
+    { id: 'm3', name: 'Finire',   done: false },
+  ];
+
+  const defaults = [
+    {
+      name: '🪄 Come usare Todo', starred: true, order: 0,
+      tasks: [
+        {
+          name: '6. 🗑 Elimina questa lista quando hai finito — tieni premuto il nome nella barra laterale oppure vai nelle impostazioni ⚙',
+          milestones: [],
+          plannedPeriod: 'prossimo_mese',
+        },
+        {
+          name: '5. 🗓 Usa l\'Agenda — trovi tutte le attività di ogni lista ordinate per periodo in un\'unica vista',
+          milestones: [],
+          plannedPeriod: 'prossima_stagione',
+        },
+        {
+          name: '4. 🎨 Personalizza — dalle impostazioni della lista (icona ⚙) puoi cambiare il colore della lista e impostare sotto-attività predefinite per i nuovi task',
+          milestones: [],
+          plannedPeriod: 'prossimo_anno_scolastico',
+        },
+        {
+          name: '3. 💡 Cliccaci sopra — si apre il pannello dettagli dove puoi aggiungere note, sotto-attività, una scadenza precisa e molto altro',
+          milestones: [
+            { id: 'm1', name: 'Aggiungi una nota', done: false },
+            { id: 'm2', name: 'Imposta una scadenza', done: false },
+            { id: 'm3', name: 'Scegli il colore', done: false },
+            { id: 'm4', name: 'Aggiungi una sotto-attività', done: false },
+          ],
+          plannedPeriod: 'questa_settimana',
+        },
+        {
+          name: '2. 📅 Scegli quando vuoi farlo — accanto al campo di testo puoi assegnare un periodo (oggi, questa settimana, questo mese…)',
+          milestones: [],
+          plannedPeriod: 'domani',
+        },
+        {
+          name: '1. ✏️ Aggiungi un task — scrivi qualcosa nel campo in alto (es. "Stendere i panni", "Studiare pagina 121") e premi Invio',
+          milestones: [],
+          plannedPeriod: 'oggi',
+        },
+      ],
+    },
+    {
+      name: '🏠 Cose di casa', starred: false, order: 1,
+      tasks: [
+        { name: 'Fare la spesa', milestones: [] },
+        { name: 'Pulire il bagno', milestones: [] },
+        { name: 'Cambiare le lenzuola', milestones: [] },
+        { name: 'Pagare le bollette', milestones: [] },
+        { name: 'Annaffiare le piante', milestones: [] },
+      ],
+    },
+    {
+      name: '💼 Lavoro', starred: false, order: 2,
+      tasks: [
+        { name: 'Dimettersi ed andare ad essere poveri vicino ad un oceano', milestones: [] },
+        { name: 'Preparare la presentazione', milestones: [] },
+        { name: 'Rispondere alle email', milestones: [] },
+      ],
+    },
+    {
+      name: '📖 Libri da leggere', starred: false, order: 3,
+      tasks: [
+        { name: 'Il nome della rosa — Umberto Eco', milestones: bookMilestones() },
+        { name: '1984 — George Orwell', milestones: bookMilestones() },
+        { name: 'Circe — Madeline Miller', milestones: bookMilestones() },
+        { name: 'Biologia del bene e del male — Robert Sapolsky', milestones: bookMilestones() },
+        { name: 'Sapiens — Yuval Noah Harari', milestones: bookMilestones() },
+      ],
+    },
+  ];
+
+  for (const list of defaults) {
+    const listRef = ref.doc();
+    batch.set(listRef, {
+      name: list.name, starred: list.starred, order: list.order,
+      createdAt: now,
+    });
+    list.tasks.forEach((task, i) => {
+      const taskRef = tasksRef(listRef.id).doc();
+      batch.set(taskRef, {
+        name: task.name, completed: false, notes: '', order: i,
+        deadline: null,
+        plannedPeriod: task.plannedPeriod || null,
+        plannedPeriodUntil: null,
+        overdue: false, recurrence: null, milestones: task.milestones,
+        createdAt: now,
+      });
+    });
+  }
+
+  await batch.commit();
+}
 
 // ============================================================
 // REALTIME LISTENERS
@@ -1466,7 +1665,7 @@ async function renderTimeline() {
   const groups = new Map(); // groupKey → { period, tasks[] }
 
   sorted.forEach(task => {
-    const rawKey  = task.plannedPeriod || '__none__';
+    const rawKey  = effectivePeriodKey(task) || '__none__';
     const groupKey = rawKey === 'ogni_giorno' ? 'oggi' : rawKey;
     const groupPeriod = groupKey !== '__none__' ? getPeriod(groupKey) : null;
 
@@ -1670,6 +1869,7 @@ function renderTaskList() {
       <div class="task-body">
         <span class="task-name">${escapeHtml(task.name)}</span>
         ${buildTaskMetaHtml(task, period, deadlinePast, isDone)}
+        ${!isDone && task.milestones && task.milestones.length > 0 ? buildTaskMilestonesHtml(task) : ''}
       </div>
       ${task.notes && !isDone ? '<span class="task-has-notes" title="Ha note"></span>' : ''}
     `;
@@ -1679,6 +1879,27 @@ function renderTaskList() {
       updateTask(task.id, buildCompleteUpdate(task, !isDailyTaskEffectivelyCompleted(task)));
     });
     li.addEventListener('click', () => openDetailPanel(task.id));
+    
+    // Add event listeners to milestone chips
+    if (!isDone && task.milestones && task.milestones.length > 0) {
+      li.querySelectorAll('[data-ms-idx]').forEach(chip => {
+        chip.addEventListener('click', async e => {
+          e.stopPropagation();
+          const idx = parseInt(chip.dataset.msIdx);
+          const freshTask = state.tasks.find(t => t.id === task.id) || task;
+          const freshMs   = (freshTask.milestones || []).map((fm, fi) =>
+            fi === idx ? { ...fm, done: !fm.done } : fm
+          );
+          const allDone = freshMs.every(fm => fm.done);
+          const updates = { milestones: freshMs };
+          if (allDone) Object.assign(updates, buildCompleteUpdate(freshTask, true));
+          else if (freshTask.completed) Object.assign(updates, buildCompleteUpdate(freshTask, false));
+          await updateTaskInList(state.activeListId, task.id, updates);
+          renderTaskList();
+        });
+      });
+    }
+    
     el.taskList.appendChild(li);
   }
 
@@ -1735,6 +1956,19 @@ function buildTaskMetaHtml(task, period, deadlinePast, isDone = false) {
     </span>`);
   }
   return parts.length > 0 ? `<div class="task-meta">${parts.join('')}</div>` : '';
+}
+
+// Build milestone chips for task-view
+function buildTaskMilestonesHtml(task) {
+  const ms = task.milestones;
+  if (!ms || ms.length === 0) return '';
+  
+  const chipsHtml = ms.map((m, idx) => {
+    const doneClass = m.done ? ' done' : '';
+    return `<span class="task-ms-chip${doneClass}" data-ms-idx="${idx}" title="${m.done ? 'Completato - Clicca per riaprire' : 'Non completato - Clicca per completare'}">${escapeHtml(m.name)}</span>`;
+  }).join('');
+  
+  return `<div class="task-ms-row">${chipsHtml}</div>`;
 }
 
 
@@ -2926,7 +3160,10 @@ function init() {
         if (el.btnLogoutMobile) el.btnLogoutMobile.classList.remove('hidden');
         if (el.btnLoginMobile)  el.btnLoginMobile.classList.add('hidden');
         if (el.authOverlay) el.authOverlay.classList.add('hidden');
-        try { listenLists(); } catch (err) { console.error('listenLists failed', err); }
+        try {
+          listenLists();
+          seedDefaultListsIfNeeded().catch(err => console.warn('seed failed', err));
+        } catch (err) { console.error('listenLists failed', err); }
       } else {
         currentUserUid = null;
         if (unsubscribeLists) { unsubscribeLists(); unsubscribeLists = null; }

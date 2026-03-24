@@ -3453,6 +3453,49 @@ body {
   padding-right: 32px;
 }
 
+/* ============================================================
+   TASK MILESTONE ROW (chips) — in task list view
+   ============================================================ */
+.task-ms-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+/* Clickable milestone chips in task list view */
+.task-ms-chip {
+  font-size: 0.68rem;
+  font-weight: 500;
+  padding: 1px 7px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color var(--t), color var(--t), background var(--t);
+  white-space: nowrap;
+  user-select: none;
+  line-height: 1.6;
+}
+
+.task-ms-chip:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.task-ms-chip.done {
+  text-decoration: line-through;
+  color: #c0c8e0;
+  border-color: transparent;
+}
+
+.task-ms-chip.done:hover {
+  color: var(--text-muted);
+  border-color: var(--border);
+  text-decoration: line-through;
+}
 
 /* ============================================================
    LIST SETTINGS MODAL
