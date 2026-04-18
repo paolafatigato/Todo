@@ -638,6 +638,25 @@ body {
   flex-shrink: 0;
 }
 
+/* Postpone button — list view task row */
+.task-postpone-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--t), color var(--t), border-color var(--t);
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+.task-item:hover .task-postpone-btn { opacity: 1; }
+.task-postpone-btn:hover { color: var(--blue); border-color: var(--blue); }
+
 /* Drag handle */
 .task-drag-handle {
   cursor: grab;
@@ -2307,6 +2326,23 @@ body {
 }
 
 .tl-deadline.past { color: var(--red); font-weight: 600; }
+
+/* Postpone button — timeline row */
+.tl-postpone-btn {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 2px 7px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--t), color var(--t), border-color var(--t);
+  line-height: 1;
+}
+.timeline-task-row:hover .tl-postpone-btn { opacity: 1; }
+.tl-postpone-btn:hover { color: var(--blue); border-color: var(--blue); }
 
 /* Overdue badge "!" in timeline */
 .tl-overdue-badge {

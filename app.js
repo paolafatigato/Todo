@@ -882,6 +882,7 @@ const state = {
   activeTaskId: null,
   unsubscribeTasks: null,
   pendingTaskId: null,       // task to open after a list finishes loading
+  detailReturnView: null,    // 'timeline' | null — where to go when closing the panel
 };
 
 let currentUserUid      = null;
@@ -1711,6 +1712,9 @@ async function renderTimeline() {
         row.style.background = `linear-gradient(90deg, ${overdueColor}18 0%, var(--surface) 50px)`;
       }
 
+      const tlNextKey = (!isEffectivelyDone) ? nextPeriodKey(task.plannedPeriod) : null;
+      const tlNextPeriod = tlNextKey ? getPeriod(tlNextKey) : null;
+
       row.innerHTML = `
         <span class="tl-check ${isEffectivelyDone ? 'checked' : ''}"></span>
         <div class="tl-body">
@@ -1723,6 +1727,7 @@ async function renderTimeline() {
             ${(() => { if (!isRecurringTask(task) || isCompletedToday(task)) return ''; const bc = getRecurrenceColor(task.recurrence.type); const lb = getRecurrenceLabel(task.recurrence); return `<span class="task-recurrence-badge" style="color:${bc};border-color:${bc}50;background:${bc}18" title="${lb}">↻ ${lb}</span>`; })()}
           </div>
         </div>
+        ${tlNextKey ? `<button class="tl-postpone-btn" title="Rimanda: ${tlNextPeriod ? tlNextPeriod.label : ''}">»</button>` : ''}
       `;
 
       // ── Milestone inline row: barra + chip, sotto il nome ────
@@ -1786,8 +1791,24 @@ async function renderTimeline() {
         renderTimeline();
       });
 
-      // Row click: navigate to the list and open the detail panel
-      row.addEventListener('click', () => openList(task.listId, task.id));
+      if (tlNextKey) {
+        row.querySelector('.tl-postpone-btn').addEventListener('click', async e => {
+          e.stopPropagation();
+          const p = getPeriod(tlNextKey);
+          await updateTaskInList(task.listId, task.id, {
+            plannedPeriod:      tlNextKey,
+            plannedPeriodUntil: p ? p.getEnd() : null,
+            overdue:            false,
+          });
+          renderTimeline();
+        });
+      }
+
+      // Row click: navigate to the list and open the detail panel (returning to timeline on close)
+      row.addEventListener('click', () => {
+        state.detailReturnView = 'timeline';
+        openList(task.listId, task.id);
+      });
 
       list.appendChild(row);
     });
@@ -1863,6 +1884,8 @@ function renderTaskList() {
     li.dataset.id = task.id;
     li.draggable  = !isDone && sortMode === 'inserimento'; // only draggable in 'inserimento' mode
 
+    const nextKey = !isDone ? nextPeriodKey(task.plannedPeriod) : null;
+
     li.innerHTML = `
       ${isDone || sortMode !== 'inserimento' ? '' : '<span class="task-drag-handle">⠿</span>'}
       <span class="task-check ${isDone ? 'checked' : ''}" data-action="check"></span>
@@ -1872,12 +1895,24 @@ function renderTaskList() {
         ${!isDone && task.milestones && task.milestones.length > 0 ? buildTaskMilestonesHtml(task) : ''}
       </div>
       ${task.notes && !isDone ? '<span class="task-has-notes" title="Ha note"></span>' : ''}
+      ${nextKey ? `<button class="task-postpone-btn" title="Rimanda: ${getPeriod(nextKey)?.label || ''}">»</button>` : ''}
     `;
 
     li.querySelector('[data-action="check"]').addEventListener('click', e => {
       e.stopPropagation();
       updateTask(task.id, buildCompleteUpdate(task, !isDailyTaskEffectivelyCompleted(task)));
     });
+    if (nextKey) {
+      li.querySelector('.task-postpone-btn').addEventListener('click', e => {
+        e.stopPropagation();
+        const p = getPeriod(nextKey);
+        updateTask(task.id, {
+          plannedPeriod:      nextKey,
+          plannedPeriodUntil: p ? p.getEnd() : null,
+          overdue:            false,
+        });
+      });
+    }
     li.addEventListener('click', () => openDetailPanel(task.id));
     
     // Add event listeners to milestone chips
@@ -2195,10 +2230,15 @@ function updateDeadlineStatus(isoStr) {
 }
 
 function closeDetailPanel() {
+  const returnView = state.detailReturnView;
   state.activeTaskId = null;
+  state.detailReturnView = null;
   el.detailPanel.classList.remove('open');
   el.overlay.classList.add('hidden');
-  setTimeout(() => el.detailPanel.classList.add('hidden'), 310);
+  setTimeout(() => {
+    el.detailPanel.classList.add('hidden');
+    if (returnView === 'timeline') showTimeline();
+  }, 310);
 }
 
 
