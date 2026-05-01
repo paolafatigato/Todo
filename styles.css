@@ -236,7 +236,8 @@ body {
 
 #btn-home,
 #btn-timeline,
-#btn-calendar {
+#btn-calendar,
+#btn-manage-periods {
   width: 100%;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
@@ -246,7 +247,22 @@ body {
   transition: background var(--t), color var(--t);
 }
 
-#btn-home:hover { background: rgba(255,255,255,0.10); color: #fff; }
+#btn-home:hover,
+#btn-timeline:hover,
+#btn-calendar:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+/* "Periodi" — slightly distinct: yellow-tinted accent separates it
+   from the three navigation buttons above */
+#btn-manage-periods {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.10);
+  padding-top: 14px;
+  color: rgba(255,240,136,0.80);   /* --yellow at 80% */
+}
+#btn-manage-periods:hover {
+  background: rgba(255,240,136,0.12);
+  color: var(--yellow);
+}
 
 /* ----------------------------------------------------------
    MAIN AREA
@@ -1029,7 +1045,8 @@ body {
 
   #btn-home,
   #btn-timeline,
-  #btn-calendar {
+  #btn-calendar,
+  #btn-manage-periods {
     padding: 8px 10px;
     font-size: 0.85rem;
   }
@@ -1228,7 +1245,8 @@ body {
 
   #btn-home,
   #btn-timeline,
-  #btn-calendar {
+  #btn-calendar,
+  #btn-manage-periods {
     width: auto;
     padding: 4px 8px;
     font-size: 0.78rem;
@@ -3895,3 +3913,352 @@ body {
   background: #2a3aa8;
   transform: translateY(-1px);
 }
+
+/* ============================================================
+   CUSTOM PERIODS MODAL
+   ============================================================ */
+
+#custom-periods-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,31,75,0.60);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 300;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+#custom-periods-backdrop.hidden { display: none !important; }
+
+#custom-periods-modal {
+  background: var(--surface);
+  border-radius: var(--radius);
+  width: min(520px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  animation: popIn 220ms cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+/* Coloured top bar — same treatment as list-header accent */
+#custom-periods-modal::before {
+  content: '';
+  display: block;
+  height: 4px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, var(--blue) 0%, var(--pink) 100%);
+  flex-shrink: 0;
+}
+
+/* inner scroll area */
+.cpm-inner {
+  padding: 24px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Header ── */
+.cpm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cpm-header h3 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+  background: linear-gradient(90deg, var(--blue) 30%, var(--petal-pink) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+#btn-cpm-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  transition: background var(--t), color var(--t);
+  flex-shrink: 0;
+}
+#btn-cpm-close:hover { background: var(--border); color: var(--text-primary); }
+
+/* ── Info hint ── */
+.cpm-hint {
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+  background: linear-gradient(135deg, rgba(53,72,192,0.06) 0%, rgba(255,152,169,0.06) 100%);
+  border-radius: var(--radius-sm);
+  padding: 11px 14px;
+  border-left: 3px solid var(--blue);
+}
+.cpm-hint strong { color: var(--text-primary); font-weight: 600; }
+
+/* ── Period list ── */
+#cpm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cpm-section-title {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0 0 5px;
+  border-bottom: 1px solid var(--border);
+}
+.cpm-section-title--custom { margin-top: 12px; }
+
+.cpm-empty {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px 0 4px;
+  font-style: italic;
+}
+
+.cpm-period-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--t), background var(--t);
+}
+.cpm-period-row:hover { border-color: rgba(53,72,192,0.35); background: #fff; }
+
+/* Standard (read-only) rows — dimmed, no hover accent */
+.cpm-period-row--standard {
+  opacity: 0.65;
+}
+.cpm-period-row--standard:hover {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.cpm-standard-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cpm-period-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--surface);
+  outline: 1.5px solid rgba(0,0,0,0.08);
+}
+
+.cpm-period-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.cpm-period-name {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cpm-period-dates {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+}
+
+.cpm-period-delete {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  transition: color var(--t), background var(--t);
+  opacity: 0;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.cpm-period-row:hover .cpm-period-delete { opacity: 1; }
+.cpm-period-delete:hover { color: var(--danger); background: rgba(255,0,34,0.08); }
+
+/* ── Add-form section ── */
+.cpm-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px 20px 20px;
+  background: linear-gradient(135deg, rgba(53,72,192,0.04) 0%, rgba(255,152,169,0.04) 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.cpm-form-title {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--blue);
+}
+
+#cpm-name {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: 0.93rem;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  background: var(--surface);
+  transition: border-color var(--t), box-shadow var(--t);
+}
+#cpm-name:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.12);
+}
+
+.cpm-dates-row {
+  display: flex;
+  gap: 10px;
+}
+
+.cpm-date-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cpm-date-field label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.cpm-date-field input[type="date"] {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.86rem;
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t);
+  color: var(--text-primary);
+}
+.cpm-date-field input[type="date"]:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.12);
+}
+
+.cpm-date-field select {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.86rem;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color var(--t), box-shadow var(--t);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.cpm-date-field select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.12);
+}
+
+/* Tipo radio row */
+.cpm-type-row {
+  display: flex;
+  gap: 16px;
+}
+.cpm-type-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.cpm-type-option input[type="radio"] {
+  accent-color: var(--blue);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+.cpm-type-option:has(input:checked) {
+  color: var(--blue);
+  font-weight: 600;
+}
+
+.cpm-color-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cpm-color-row label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.cpm-add-btn {
+  align-self: flex-start;
+  padding: 10px 24px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--blue) 0%, #5060d8 100%);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.88rem;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 10px rgba(53,72,192,0.28);
+  transition: box-shadow var(--t), transform var(--t), opacity var(--t);
+}
+.cpm-add-btn:hover {
+  box-shadow: 0 4px 18px rgba(53,72,192,0.40);
+  transform: translateY(-1px);
+}
+.cpm-add-btn:active { transform: translateY(0); box-shadow: none; }
+.cpm-add-btn:disabled { opacity: 0.50; pointer-events: none; }
+
+

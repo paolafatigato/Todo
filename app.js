@@ -34,16 +34,14 @@ function cssVar(name, fallback) {
   }
 }
 const PERIODS = [
-  { key: 'oggi',                     label: 'Oggi',                      color: cssVar('--c15', '#CE2D4F'), getEnd: () => endOfDay(new Date()),                                                      getStart: () => startOfDayMs(new Date()) },
-  { key: 'domani',                   label: 'Domani',                    color: cssVar('--c12', '#F36B7E'), getEnd: () => endOfDay(addDays(new Date(), 1)),                                          getStart: () => startOfDayMs(addDays(new Date(), 1)) },
-  { key: 'questa_settimana',         label: 'Questa settimana',          color: cssVar('--c11', '#FF98A9'), getEnd: () => endOfWeek(new Date()),                                                     getStart: () => startOfWeekMs(new Date()) },
-  { key: 'prossima_settimana',       label: 'Prossima settimana',        color: cssVar('--c9', '#DB5ABA'), getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),                          getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
-  { key: 'questo_mese',              label: 'Questo mese',               color: cssVar('--c6', '#B285EC'), getEnd: () => endOfMonth(new Date()),                                                    getStart: () => startOfMonthMs(new Date()) },
-  { key: 'prossimo_mese',            label: 'Prossimo mese',             color: cssVar('--c5', '#3548C0'), getEnd: () => endOfMonth(addMonths(new Date(), 1)),                                      getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
-  { key: 'prossima_stagione',        label: 'Prossima stagione',         color: cssVar('--c4', '#6F8FE3'), getEnd: () => endOfNextSeason(new Date()),                                               getStart: () => startOfNextSeasonMs(new Date()) },
-  { key: 'prossimo_anno_scolastico', label: 'Prossimo anno scolastico',  color: cssVar('--c3', '#A1BEF8'), getEnd: () => endOfSchoolYear(new Date()),                                               getStart: () => startOfSchoolYearMs(new Date()) },
-  { key: 'prossimi_5_anni',          label: 'Prossimi 5 anni',           color: cssVar('--c2', '#5C946E'), getEnd: () => endOfDay(addYears(new Date(), 5)),                                         getStart: () => startOfDayMs(new Date()) },
-  { key: 'prossima_vita',            label: 'Prossima vita',             color: cssVar('--c1', '#FFF088'), getEnd: () => null,                                                                      getStart: () => null },
+  { key: 'oggi',               label: 'Oggi',               color: cssVar('--c15', '#CE2D4F'), getEnd: () => endOfDay(new Date()),                                         getStart: () => startOfDayMs(new Date()) },
+  { key: 'domani',             label: 'Domani',             color: cssVar('--c12', '#F36B7E'), getEnd: () => endOfDay(addDays(new Date(), 1)),                             getStart: () => startOfDayMs(addDays(new Date(), 1)) },
+  { key: 'questa_settimana',   label: 'Questa settimana',   color: cssVar('--c11', '#FF98A9'), getEnd: () => endOfWeek(new Date()),                                        getStart: () => startOfWeekMs(new Date()) },
+  { key: 'prossima_settimana', label: 'Prossima settimana', color: cssVar('--c9',  '#DB5ABA'), getEnd: () => endOfWeek(addDays(endOfWeekDate(new Date()), 1)),             getStart: () => startOfWeekMs(addDays(endOfWeekDate(new Date()), 1)) },
+  { key: 'questo_mese',        label: 'Questo mese',        color: cssVar('--c6',  '#B285EC'), getEnd: () => endOfMonth(new Date()),                                       getStart: () => startOfMonthMs(new Date()) },
+  { key: 'prossimo_mese',      label: 'Prossimo mese',      color: cssVar('--c5',  '#3548C0'), getEnd: () => endOfMonth(addMonths(new Date(), 1)),                         getStart: () => startOfMonthMs(addMonths(new Date(), 1)) },
+  { key: 'prossimi_5_anni',    label: 'Prossimi 5 anni',    color: cssVar('--c2',  '#5C946E'), getEnd: () => endOfDay(addYears(new Date(), 5)),                            getStart: () => startOfDayMs(new Date()) },
+  { key: 'prossima_vita',      label: 'Prossima vita',      color: cssVar('--c1',  '#FFF088'), getEnd: () => null,                                                         getStart: () => null },
 ];
 
 // ─── DAILY RECURRING PERIOD ───────────────────────────────────
@@ -57,6 +55,52 @@ const DAILY_PERIOD = {
   getEnd:   () => null,
   getStart: () => startOfDayMs(new Date()),
 };
+
+// ─── CUSTOM (USER-DEFINED) PERIODS ────────────────────────────
+// Populated at runtime from Firestore (user document → customPeriods[]).
+// Each entry mirrors the PERIODS structure but has isCustom: true.
+let customPeriods = [];           // array of period objects (with getEnd/getStart)
+let unsubscribeCustomPeriods = null;
+
+/**
+ * Convert a raw Firestore custom-period record into a live period object
+ * compatible with the rest of the PERIODS API.
+ */
+function buildCustomPeriodObj(p) {
+  if (p.type === 'weekly') {
+    const startDow = p.startDow != null ? p.startDow : 6; // default Sab
+    const endDow   = p.endDow   != null ? p.endDow   : 0; // default Dom
+    return {
+      key:      p.key,
+      label:    p.name,
+      color:    p.color || '#6F8FE3',
+      isCustom: true,
+      type:     'weekly',
+      startDow,
+      endDow,
+      getEnd:   () => weeklyWindowEndMs(startDow, endDow),
+      getStart: () => weeklyWindowStartMs(startDow, endDow),
+    };
+  }
+  return {
+    key:       p.key,
+    label:     p.name,
+    color:     p.color || '#6F8FE3',
+    isCustom:  true,
+    endDate:   p.endDate   || null,
+    startDate: p.startDate || null,
+    getEnd: () => {
+      if (!p.endDate) return null;
+      const [y, m, d] = p.endDate.split('-').map(Number);
+      return endOfDay(new Date(y, m - 1, d));
+    },
+    getStart: () => {
+      if (!p.startDate) return null;
+      const [y, m, d] = p.startDate.split('-').map(Number);
+      return startOfDayMs(new Date(y, m - 1, d));
+    },
+  };
+}
 
 // ─── RECURRING TASK HELPERS ───────────────────────────────────
 
@@ -280,8 +324,6 @@ function periodKeyForDaysAhead(diffDays) {
   if (diffDays <= 14) return 'prossima_settimana';
   if (diffDays <= 31) return 'questo_mese';
   if (diffDays <= 60) return 'prossimo_mese';
-  if (diffDays <= 120) return 'prossima_stagione';
-  if (diffDays <= 400) return 'prossimo_anno_scolastico';
   return 'prossimi_5_anni';
 }
 
@@ -462,7 +504,9 @@ function getListColorHex(list) {
 
 const getPeriod = key => {
   if (key === 'ogni_giorno') return DAILY_PERIOD;
-  return PERIODS.find(p => p.key === key) || null;
+  const standard = PERIODS.find(p => p.key === key);
+  if (standard) return standard;
+  return customPeriods.find(p => p.key === key) || null;
 };
 
 const nextPeriodKey = key => {
@@ -495,7 +539,8 @@ function effectivePeriodKey(task) {
   // Both exist: pick the more urgent (lower PERIODS index)
   const di = PERIODS.findIndex(p => p.key === declared);
   const ki = PERIODS.findIndex(p => p.key === deadlineKey);
-  if (di < 0) return deadlineKey;
+  // If declared is a custom period (di < 0), use deadline period if it's a standard one
+  if (di < 0) return ki >= 0 ? deadlineKey : declared;
   if (ki < 0) return declared;
   return ki < di ? deadlineKey : declared;
 }
@@ -503,13 +548,35 @@ function effectivePeriodKey(task) {
 /**
  * Numeric sort key for a task's planned period.
  * No period → sorted to the very end (9999).
+ * Custom periods → sorted after standard periods, by proximity of end date.
  */
 function periodSortKey(task) {
   if (task.plannedPeriod === 'ogni_giorno') return 0; // appears with 'oggi'
   const key = effectivePeriodKey(task);
   if (!key) return 9999;
   const idx = PERIODS.findIndex(p => p.key === key);
-  return idx >= 0 ? idx : 9999;
+  if (idx >= 0) return idx;
+
+  // Custom (user-defined) period: insert chronologically among standard periods.
+  // Works for both 'weekly' (dynamic getEnd) and 'once' (fixed date) types.
+  const cp = customPeriods.find(p => p.key === key);
+  const cpEndMs = cp ? cp.getEnd() : null;
+
+  if (!cpEndMs) {
+    // No end → just before prossima_vita
+    const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
+    return vitaIdx >= 0 ? vitaIdx - 0.5 : PERIODS.length - 0.5;
+  }
+
+  // Walk standard periods in order; place just before the first whose end >= cpEndMs.
+  for (let i = 0; i < PERIODS.length; i++) {
+    const stdEnd = PERIODS[i].getEnd();
+    if (stdEnd === null) return i - 0.5;   // hit prossima_vita → insert before it
+    if (cpEndMs <= stdEnd) return Math.max(0.5, i - 0.5);
+  }
+
+  const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
+  return vitaIdx >= 0 ? vitaIdx - 0.5 : PERIODS.length - 0.5;
 }
 
 /**
@@ -616,7 +683,7 @@ function isCompletedToday(task) {
 // DATE HELPERS
 // ============================================================
 
-function endOfDay(date)  { const d = new Date(date); d.setDate(d.getDate() + 1); d.setHours(0,59,59,999); return d.getTime(); }
+function endOfDay(date)  { const d = new Date(date); d.setHours(23,59,59,999); return d.getTime(); }
 function addDays(date,n) { const d = new Date(date); d.setDate(d.getDate()+n); return d; }
 function addMonths(date,n){ const d = new Date(date); d.setMonth(d.getMonth()+n); return d; }
 function addYears(date,n) { const d = new Date(date); d.setFullYear(d.getFullYear()+n); return d; }
@@ -685,24 +752,63 @@ function getOverdueColor(task) {
 
 function startOfDayMs(date) {
   const d = new Date(date);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 1, 0, 0, 0).getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 1, 0, 0).getTime();
 }
 
-/** Monday of the week containing `date`, 01:00 */
+/** Monday of the week containing `date`, 00:01 */
 function startOfWeekMs(date) {
   const d = new Date(date);
   const day = d.getDay(); // 0=Sun
   const daysToMon = day === 0 ? -6 : 1 - day;
   d.setDate(d.getDate() + daysToMon);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 1, 0, 0, 0).getTime();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 1, 0, 0).getTime();
 }
 
-/** First day of the month of `date`, 01:00 */
+/** First day of the month of `date`, 00:01 */
 function startOfMonthMs(date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1, 1, 0, 0, 0).getTime();
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 1, 0, 0).getTime();
 }
 
-/** First day of the NEXT meteorological season, 01:00 */
+// ─── WEEKLY WINDOW HELPERS (for recurring custom periods) ─────────────────
+// Used by buildCustomPeriodObj when type === 'weekly'.
+// startDow / endDow: 0=Dom 1=Lun 2=Mar 3=Mer 4=Gio 5=Ven 6=Sab
+
+/** True if today's day-of-week is inside the [startDow, endDow] window. */
+function isInWeeklyWindow(startDow, endDow) {
+  const dow = new Date().getDay();
+  if (startDow <= endDow) return dow >= startDow && dow <= endDow;
+  return dow >= startDow || dow <= endDow; // window wraps around week boundary
+}
+
+/** Start-of-day ms for the current (if in window) or next occurrence of startDow. */
+function weeklyWindowStartMs(startDow, endDow) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const dow = today.getDay();
+  if (isInWeeklyWindow(startDow, endDow)) {
+    let daysBack = startDow <= endDow
+      ? dow - startDow
+      : (dow >= startDow ? dow - startDow : dow + (7 - startDow));
+    const d = new Date(today);
+    d.setDate(today.getDate() - daysBack);
+    return d.getTime() + 60000; // 00:01
+  }
+  const diff = ((startDow - dow + 7) % 7) || 7;
+  const d = new Date(today);
+  d.setDate(today.getDate() + diff);
+  return d.getTime() + 60000;
+}
+
+/** End-of-day ms for the endDow of the current/next weekly window. */
+function weeklyWindowEndMs(startDow, endDow) {
+  const startMs = weeklyWindowStartMs(startDow, endDow);
+  const start = new Date(startMs); start.setHours(0, 0, 0, 0);
+  const daysDiff = (endDow - start.getDay() + 7) % 7;
+  const end = new Date(start);
+  end.setDate(start.getDate() + daysDiff);
+  return endOfDay(end);
+}
+
+/** First day of the NEXT meteorological season, 00:01 */
 function startOfNextSeasonMs(date) {
   const m = date.getMonth();
   let cur = m <= 1 || m === 11 ? 0 : m <= 4 ? 1 : m <= 7 ? 2 : 3;
@@ -711,14 +817,14 @@ function startOfNextSeasonMs(date) {
   const startMonth = firstMonths[next];
   let startYear = date.getFullYear();
   if (startMonth <= m) startYear++;
-  return new Date(startYear, startMonth, 1, 1, 0, 0, 0).getTime();
+  return new Date(startYear, startMonth, 1, 0, 1, 0, 0).getTime();
 }
 
-/** September 1 of the current or next Italian school year, 01:00 */
+/** September 1 of the current or next Italian school year, 00:01 */
 function startOfSchoolYearMs(date) {
   const y = date.getFullYear(), m = date.getMonth();
   const startYear = m >= 8 ? y : y - 1; // Sep=8
-  return new Date(startYear, 8, 1, 1, 0, 0, 0).getTime(); // Sep 1
+  return new Date(startYear, 8, 1, 0, 1, 0, 0).getTime(); // Sep 1
 }
 
 /**
@@ -825,16 +931,43 @@ async function autoAdvanceOverdueTasks(listId) {
     if (!task.plannedPeriod || task.plannedPeriod === 'ogni_giorno' || task.completed) return;
 
     const currentIdx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
+    const isInCustomPeriod = currentIdx < 0 && customPeriods.some(p => p.key === task.plannedPeriod);
+
+    // ── Custom period cascade: move to a standard period when close to end date ──
+    if (isInCustomPeriod) {
+      if (!task.plannedPeriodUntil) return;
+      const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
+      let targetPeriod = null;
+      if      (daysLeft < 1)  targetPeriod = PERIODS.find(p => p.key === 'oggi');
+      else if (daysLeft < 2)  targetPeriod = PERIODS.find(p => p.key === 'domani');
+      else if (daysLeft < 7)  targetPeriod = PERIODS.find(p => p.key === 'questa_settimana');
+      else if (daysLeft < 30) targetPeriod = PERIODS.find(p => p.key === 'questo_mese');
+      if (!targetPeriod) return;
+      const update = {
+        plannedPeriod:      targetPeriod.key,
+        plannedPeriodUntil: targetPeriod.getEnd(),
+        overdue:            true,
+      };
+      batch.update(tasksRef(listId).doc(task.id), update);
+      Object.assign(task, update);
+      hasChanges = true;
+      return;
+    }
+
     if (currentIdx <= 0) return; // already at 'oggi' or unknown period
 
     let targetPeriod = null;
 
     // 1) Period-expiry based advance (existing logic, requires plannedPeriodUntil)
+    // Days are 00:01–23:59. A period advances when today >= the period's end day:
+    //   daysLeft < 1 → same day as end (or past) → oggi
+    //   daysLeft < 2 → tomorrow is the last day   → domani
+    //   daysLeft < 7 → within the current week     → questa_settimana
     if (task.plannedPeriodUntil) {
       const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
-      if      (daysLeft <= 0 )               targetPeriod = PERIODS[0]; // oggi
-      else if (daysLeft <= 2 && currentIdx > 1) targetPeriod = PERIODS[1]; // domani
-      else if (daysLeft <= 7 && currentIdx > 2) targetPeriod = PERIODS[2]; // questa_settimana
+      if      (daysLeft < 1  && currentIdx > 0) targetPeriod = PERIODS[0]; // oggi
+      else if (daysLeft < 2  && currentIdx > 1) targetPeriod = PERIODS[1]; // domani
+      else if (daysLeft < 7  && currentIdx > 2) targetPeriod = PERIODS[2]; // questa_settimana
     }
 
     // 2) Deadline-based advance: if deadline is approaching sooner than the
@@ -1063,6 +1196,170 @@ async function deleteList(listId) {
 
 
 // ============================================================
+// CUSTOM PERIODS — CRUD & REALTIME LISTENER
+// ============================================================
+
+function listenCustomPeriods() {
+  if (unsubscribeCustomPeriods) { unsubscribeCustomPeriods(); unsubscribeCustomPeriods = null; }
+  if (!currentUserUid) return;
+  unsubscribeCustomPeriods = userDocRef().onSnapshot(snap => {
+    const data = snap.data() || {};
+    customPeriods = (data.customPeriods || []).map(buildCustomPeriodObj);
+    populatePeriodSelect();
+    // If the custom-periods modal is currently open, refresh its list
+    const backdrop = document.getElementById('custom-periods-backdrop');
+    if (backdrop && !backdrop.classList.contains('hidden')) renderCpmList();
+  });
+}
+
+async function addCustomPeriod(data) {
+  if (!data.name.trim()) return;
+  if (data.type !== 'weekly' && !data.endDate) return;
+  const key = 'cperiod_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const snap = await userDocRef().get();
+  const existing = (snap.exists ? snap.data().customPeriods : null) || [];
+  const record = data.type === 'weekly'
+    ? { key, name: data.name.trim(), type: 'weekly', startDow: data.startDow, endDow: data.endDow, color: data.color }
+    : { key, name: data.name.trim(), type: 'once', startDate: data.startDate || null, endDate: data.endDate, color: data.color };
+  await userDocRef().set(
+    { customPeriods: [...existing, record] },
+    { merge: true }
+  );
+}
+
+async function deleteCustomPeriod(key) {
+  const snap = await userDocRef().get();
+  const existing = (snap.exists ? snap.data().customPeriods : null) || [];
+  await userDocRef().set(
+    { customPeriods: existing.filter(p => p.key !== key) },
+    { merge: true }
+  );
+}
+
+
+// ============================================================
+// CUSTOM PERIODS MODAL
+// ============================================================
+
+let cpmSelectedColor = '#6F8FE3';
+
+function openCustomPeriodsModal() {
+  renderCpmList();
+  renderCpmColorSwatches();
+  const nameEl  = document.getElementById('cpm-name');
+  const startEl = document.getElementById('cpm-start');
+  const endEl   = document.getElementById('cpm-end');
+  if (nameEl)  nameEl.value  = '';
+  if (startEl) startEl.value = '';
+  if (endEl)   endEl.value   = '';
+  // Reset to 'once' type
+  const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
+  if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
+  cpmSelectedColor = '#6F8FE3';
+  document.getElementById('custom-periods-backdrop').classList.remove('hidden');
+  setTimeout(() => nameEl && nameEl.focus(), 50);
+}
+
+function closeCustomPeriodsModal() {
+  document.getElementById('custom-periods-backdrop').classList.add('hidden');
+}
+
+function toggleCpmTypeSection(type) {
+  const onceSection   = document.getElementById('cpm-once-section');
+  const weeklySection = document.getElementById('cpm-weekly-section');
+  if (onceSection)   onceSection.classList.toggle('hidden', type !== 'once');
+  if (weeklySection) weeklySection.classList.toggle('hidden', type !== 'weekly');
+}
+
+function renderCpmList() {
+  const container = document.getElementById('cpm-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // ── Standard (built-in) periods — read-only ──────────────────
+  const stdTitle = document.createElement('div');
+  stdTitle.className = 'cpm-section-title';
+  stdTitle.textContent = 'Periodi standard';
+  container.appendChild(stdTitle);
+
+  PERIODS.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'cpm-period-row cpm-period-row--standard';
+    row.innerHTML = `
+      <span class="cpm-period-dot" style="background:${p.color}"></span>
+      <div class="cpm-period-info">
+        <span class="cpm-period-name">${escapeHtml(p.label)}</span>
+      </div>
+      <span class="cpm-standard-badge">automatico</span>
+    `;
+    container.appendChild(row);
+  });
+
+  // ── Custom (user-defined) periods ────────────────────────────
+  const custTitle = document.createElement('div');
+  custTitle.className = 'cpm-section-title cpm-section-title--custom';
+  custTitle.textContent = 'I miei periodi';
+  container.appendChild(custTitle);
+
+  if (customPeriods.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'cpm-empty';
+    empty.textContent = 'Nessun periodo personalizzato ancora.';
+    container.appendChild(empty);
+    return;
+  }
+
+  customPeriods.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'cpm-period-row';
+    const DOW_NAMES_IT = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+    let periodInfo;
+    if (p.type === 'weekly') {
+      periodInfo = `ogni settimana: ${DOW_NAMES_IT[p.startDow]} → ${DOW_NAMES_IT[p.endDow]}`;
+    } else {
+      const startFmt = p.startDate ? formatDeadline(p.startDate) : '—';
+      const endFmt   = p.endDate   ? formatDeadline(p.endDate)   : '—';
+      periodInfo = `${startFmt} → ${endFmt}`;
+    }
+    row.innerHTML = `
+      <span class="cpm-period-dot" style="background:${p.color}"></span>
+      <div class="cpm-period-info">
+        <span class="cpm-period-name">${escapeHtml(p.label)}</span>
+        <span class="cpm-period-dates">${periodInfo}</span>
+      </div>
+      <button class="cpm-period-delete" data-key="${escapeHtml(p.key)}" title="Elimina periodo">🗑</button>
+    `;
+    row.querySelector('.cpm-period-delete').addEventListener('click', async () => {
+      if (!confirm(`Eliminare il periodo "${p.label}"?\nI task assegnati a questo periodo resteranno visibili senza periodo.`)) return;
+      await deleteCustomPeriod(p.key);
+    });
+    container.appendChild(row);
+  });
+}
+
+function renderCpmColorSwatches() {
+  const container = document.getElementById('cpm-color-swatches');
+  if (!container) return;
+  container.innerHTML = '';
+  LIST_COLORS.forEach(c => {
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 'lsm-swatch' + (c.hex === cpmSelectedColor ? ' selected' : '');
+    sw.style.background = c.hex;
+    sw.dataset.hex = c.hex;
+    sw.title = c.label;
+    if (c.key === 'c1') sw.style.border = '2px solid #ccc'; // yellow needs contrast
+    sw.addEventListener('click', () => {
+      container.querySelectorAll('.lsm-swatch').forEach(s => s.classList.remove('selected'));
+      sw.classList.add('selected');
+      cpmSelectedColor = c.hex;
+    });
+    container.appendChild(sw);
+  });
+}
+
+
+// ============================================================
 // TASKS — CRUD
 // ============================================================
 
@@ -1249,12 +1546,12 @@ async function createDefaultLists() {
         {
           name: '5. 🗓 Usa l\'Agenda — trovi tutte le attività di ogni lista ordinate per periodo in un\'unica vista',
           milestones: [],
-          plannedPeriod: 'prossima_stagione',
+          plannedPeriod: 'prossimo_mese',
         },
         {
           name: '4. 🎨 Personalizza — dalle impostazioni della lista (icona ⚙) puoi cambiare il colore della lista e impostare sotto-attività predefinite per i nuovi task',
           milestones: [],
-          plannedPeriod: 'prossimo_anno_scolastico',
+          plannedPeriod: 'prossimi_5_anni',
         },
         {
           name: '3. 💡 Cliccaci sopra — si apre il pannello dettagli dove puoi aggiungere note, sotto-attività, una scadenza precisa e molto altro',
@@ -2763,11 +3060,11 @@ function bindEvents() {
       });
       // Populate period select, default to 'oggi'
       el.tlTaskPeriodSel.innerHTML = '';
-      const allPeriods = [DAILY_PERIOD, ...PERIODS];
+      const allPeriods = [DAILY_PERIOD, ...customPeriods, ...PERIODS];
       allPeriods.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.key;
-        opt.textContent = p.label;
+        opt.textContent = p.key === DAILY_PERIOD.key ? '↻ ' + p.label : (p.isCustom ? '◈ ' + p.label : p.label);
         if (p.key === 'oggi') opt.selected = true;
         el.tlTaskPeriodSel.appendChild(opt);
       });
@@ -2850,6 +3147,7 @@ function bindEvents() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (!el.modalBackdrop.classList.contains('hidden')) hideModal();
+      else if (!(document.getElementById('custom-periods-backdrop')?.classList.contains('hidden'))) closeCustomPeriodsModal();
       else if (!el.detailPanel.classList.contains('hidden')) closeDetailPanel();
     }
   });
@@ -2885,6 +3183,71 @@ function bindEvents() {
       }
     }
   });
+
+  // ── Custom periods modal ─────────────────────────────────────
+  const btnManagePeriods = document.getElementById('btn-manage-periods');
+  if (btnManagePeriods) btnManagePeriods.addEventListener('click', openCustomPeriodsModal);
+
+  const btnCpmClose = document.getElementById('btn-cpm-close');
+  if (btnCpmClose) btnCpmClose.addEventListener('click', closeCustomPeriodsModal);
+
+  const cpmBackdrop = document.getElementById('custom-periods-backdrop');
+  if (cpmBackdrop) {
+    cpmBackdrop.addEventListener('click', e => {
+      if (e.target === cpmBackdrop) closeCustomPeriodsModal();
+    });
+  }
+
+  const btnCpmAdd = document.getElementById('btn-cpm-add');
+  if (btnCpmAdd) {
+    btnCpmAdd.addEventListener('click', async () => {
+      const name = (document.getElementById('cpm-name')?.value || '').trim();
+      if (!name) { alert('Inserisci un nome per il periodo.'); return; }
+
+      const typeEl = document.querySelector('input[name="cpm-type"]:checked');
+      const type   = typeEl ? typeEl.value : 'once';
+      const data   = { name, color: cpmSelectedColor, type };
+
+      if (type === 'weekly') {
+        data.startDow = parseInt(document.getElementById('cpm-start-dow')?.value ?? '6', 10);
+        data.endDow   = parseInt(document.getElementById('cpm-end-dow')?.value   ?? '0', 10);
+      } else {
+        const startDate = document.getElementById('cpm-start')?.value || '';
+        const endDate   = document.getElementById('cpm-end')?.value   || '';
+        if (!endDate) { alert('La data di fine è obbligatoria.'); return; }
+        if (startDate && endDate && startDate > endDate) {
+          alert('La data di inizio deve essere precedente alla data di fine.');
+          return;
+        }
+        data.startDate = startDate || null;
+        data.endDate   = endDate;
+      }
+
+      btnCpmAdd.disabled = true;
+      await addCustomPeriod(data);
+      btnCpmAdd.disabled = false;
+
+      document.getElementById('cpm-name').value = '';
+      if (document.getElementById('cpm-start')) document.getElementById('cpm-start').value = '';
+      if (document.getElementById('cpm-end'))   document.getElementById('cpm-end').value   = '';
+      const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
+      if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
+      cpmSelectedColor = '#6F8FE3';
+      renderCpmColorSwatches();
+    });
+  }
+
+  // Toggle once/weekly form sections on radio change
+  document.querySelectorAll('input[name="cpm-type"]').forEach(radio => {
+    radio.addEventListener('change', () => toggleCpmTypeSection(radio.value));
+  });
+
+  const cpmNameInput = document.getElementById('cpm-name');
+  if (cpmNameInput) {
+    cpmNameInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-cpm-add')?.click();
+    });
+  }
 
   // ── Sidebar search ───────────────────────────────────────────
   if (el.sidebarSearch) {
@@ -3174,16 +3537,30 @@ function escapeHtml(str) {
 function populatePeriodSelect() {
   const selects = [el.detailPeriod, el.taskPeriodQuick].filter(Boolean);
   selects.forEach(sel => {
+    const prevValue = sel.value; // preserve selection across refresh
     sel.innerHTML = '<option value="">— Periodo —</option>';
     const optDaily = document.createElement('option');
     optDaily.value       = DAILY_PERIOD.key;
     optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
     sel.appendChild(optDaily);
+    // Custom (user-defined) periods in their own group
+    if (customPeriods.length > 0) {
+      const grp = document.createElement('optgroup');
+      grp.label = 'I miei periodi';
+      customPeriods.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.key; opt.textContent = '◈ ' + p.label;
+        grp.appendChild(opt);
+      });
+      sel.appendChild(grp);
+    }
     PERIODS.forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.key; opt.textContent = p.label;
       sel.appendChild(opt);
     });
+    // Restore previous selection if it still exists
+    if (prevValue) sel.value = prevValue;
   });
 }
 
@@ -3202,12 +3579,15 @@ function init() {
         if (el.authOverlay) el.authOverlay.classList.add('hidden');
         try {
           listenLists();
+          listenCustomPeriods();
           seedDefaultListsIfNeeded().catch(err => console.warn('seed failed', err));
         } catch (err) { console.error('listenLists failed', err); }
       } else {
         currentUserUid = null;
         if (unsubscribeLists) { unsubscribeLists(); unsubscribeLists = null; }
+        if (unsubscribeCustomPeriods) { unsubscribeCustomPeriods(); unsubscribeCustomPeriods = null; }
         if (state.unsubscribeTasks) { state.unsubscribeTasks(); state.unsubscribeTasks = null; }
+        customPeriods = [];
         state.lists = []; state.tasks = [];
         renderSidebar(); showHomepage();
         if (el.btnLogin)    el.btnLogin.classList.remove('hidden');

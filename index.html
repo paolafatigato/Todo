@@ -34,6 +34,7 @@
         <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
         <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
         <button id="btn-calendar" title="Calendario">◫ Calendario</button>
+        <button id="btn-manage-periods" title="Gestisci periodi personalizzati">◈ Periodi</button>
       </div>
       <div id="mobile-logout-trigger" class="hidden" title="Menu logout"></div>
       <div class="auth-controls">
@@ -470,6 +471,91 @@
       <div class="lsm-actions">
         <button id="btn-lsm-cancel">Annulla</button>
         <button id="btn-lsm-save">Salva</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CUSTOM PERIODS MODAL -->
+  <div id="custom-periods-backdrop" class="hidden">
+    <div id="custom-periods-modal">
+      <div class="cpm-inner">
+
+        <div class="cpm-header">
+          <h3>I miei periodi</h3>
+          <button id="btn-cpm-close">✕</button>
+        </div>
+
+        <p class="cpm-hint">
+          Crea periodi personalizzati (es. "Anno scolastico", "Quest'estate").
+          I task assegnati scalano automaticamente verso periodi più brevi
+          man mano che la data di fine si avvicina:
+          <strong>1 mese prima → questo mese · 1 settimana → questa settimana · domani → domani · oggi → oggi</strong>.
+        </p>
+
+        <div id="cpm-list"></div>
+
+        <div class="cpm-add-form">
+          <div class="cpm-form-title">Nuovo periodo</div>
+          <input id="cpm-name" type="text" placeholder="Es. Anno scolastico 2025/26…" autocomplete="off" />
+
+          <div class="cpm-type-row">
+            <label class="cpm-type-option">
+              <input type="radio" name="cpm-type" value="once" checked /> Periodo unico
+            </label>
+            <label class="cpm-type-option">
+              <input type="radio" name="cpm-type" value="weekly" /> Ricorrente settimanale
+            </label>
+          </div>
+
+          <div id="cpm-once-section">
+            <div class="cpm-dates-row">
+              <div class="cpm-date-field">
+                <label for="cpm-start">Inizio</label>
+                <input id="cpm-start" type="date" />
+              </div>
+              <div class="cpm-date-field">
+                <label for="cpm-end">Fine *</label>
+                <input id="cpm-end" type="date" />
+              </div>
+            </div>
+          </div>
+
+          <div id="cpm-weekly-section" class="hidden">
+            <div class="cpm-dates-row">
+              <div class="cpm-date-field">
+                <label for="cpm-start-dow">Dal</label>
+                <select id="cpm-start-dow">
+                  <option value="1">Lunedì</option>
+                  <option value="2">Martedì</option>
+                  <option value="3">Mercoledì</option>
+                  <option value="4">Giovedì</option>
+                  <option value="5">Venerdì</option>
+                  <option value="6" selected>Sabato</option>
+                  <option value="0">Domenica</option>
+                </select>
+              </div>
+              <div class="cpm-date-field">
+                <label for="cpm-end-dow">Al</label>
+                <select id="cpm-end-dow">
+                  <option value="1">Lunedì</option>
+                  <option value="2">Martedì</option>
+                  <option value="3">Mercoledì</option>
+                  <option value="4">Giovedì</option>
+                  <option value="5">Venerdì</option>
+                  <option value="6">Sabato</option>
+                  <option value="0" selected>Domenica</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="cpm-color-row">
+            <label>Colore</label>
+            <div id="cpm-color-swatches" class="lsm-swatches"></div>
+          </div>
+          <button id="btn-cpm-add" class="cpm-add-btn">+ Aggiungi periodo</button>
+        </div>
+
       </div>
     </div>
   </div>
