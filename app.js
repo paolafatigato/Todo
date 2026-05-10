@@ -511,7 +511,18 @@ const getPeriod = key => {
 
 const nextPeriodKey = key => {
   const idx = PERIODS.findIndex(p => p.key === key);
-  return (idx >= 0 && idx < PERIODS.length - 1) ? PERIODS[idx + 1].key : null;
+  if (idx < 0 || idx >= PERIODS.length - 1) return null;
+  // Skip periods whose end is the same as (or earlier than) the current period's end.
+  // This ensures that e.g. on Sunday, postponing 'questa_settimana' returns 'domani'
+  // rather than 'prossima_settimana' (both share the same week-end boundary that day).
+  const currentEnd = PERIODS[idx].getEnd ? PERIODS[idx].getEnd() : null;
+  for (let i = idx + 1; i < PERIODS.length; i++) {
+    const nextEnd = PERIODS[i].getEnd ? PERIODS[i].getEnd() : null;
+    if (nextEnd === null || currentEnd === null || nextEnd > currentEnd) {
+      return PERIODS[i].key;
+    }
+  }
+  return null;
 };
 
 /**
@@ -863,14 +874,17 @@ function dayInRange(isoStr, startMs, endMs) {
 // AUTO-ADVANCE OVERDUE TASKS
 // ============================================================
 
-async function autoAdvanceOverdueTasks(listId) {
+async function autoAdvanceOverdueTasks(listId, tasksArray, skipRender = false) {
   const now = Date.now();
   const today = new Date();
   const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
   const batch = db.batch();
   let hasChanges = false;
 
-  state.tasks.forEach(task => {
+  // Allow callers (e.g. timeline) to pass an explicit tasks array instead of state.tasks
+  const tasks = tasksArray !== undefined ? tasksArray : state.tasks;
+
+  tasks.forEach(task => {
     // ── New recurrence system: reset when the period rolls over ───
     if (isRecurringTask(task)) {
       const rec = task.recurrence;
@@ -1001,7 +1015,7 @@ async function autoAdvanceOverdueTasks(listId) {
     hasChanges = true;
   });
 
-  if (hasChanges) { await batch.commit(); renderTaskList(); }
+  if (hasChanges) { await batch.commit(); if (!skipRender) renderTaskList(); }
 }
 
 
@@ -1937,6 +1951,15 @@ async function renderTimeline() {
       '<div class="empty-state-text">Errore nel caricamento.</div></div>';
     return;
   }
+
+  // Run auto-advance for every list so that e.g. 'questa_settimana' tasks
+  // are promoted to 'oggi' on Sunday even when no individual list is open.
+  // skipRender=true avoids triggering the list-view re-render; the mutation
+  // is applied in-place to the fetched task objects and persisted to Firestore.
+  const tlListIds = [...new Set(allTasks.map(t => t.listId))];
+  await Promise.all(tlListIds.map(lid =>
+    autoAdvanceOverdueTasks(lid, allTasks.filter(t => t.listId === lid), true)
+  ));
 
   const showCompleted = el.toggleShowCompleted.checked;
   // If "show completed" is enabled: include all still-uncompleted tasks
