@@ -87,6 +87,7 @@ function buildCustomPeriodObj(p) {
     label:     p.name,
     color:     p.color || '#6F8FE3',
     isCustom:  true,
+    type:      'once',
     endDate:   p.endDate   || null,
     startDate: p.startDate || null,
     getEnd: () => {
@@ -550,8 +551,9 @@ function effectivePeriodKey(task) {
   // Both exist: pick the more urgent (lower PERIODS index)
   const di = PERIODS.findIndex(p => p.key === declared);
   const ki = PERIODS.findIndex(p => p.key === deadlineKey);
-  // If declared is a custom period (di < 0), use deadline period if it's a standard one
-  if (di < 0) return ki >= 0 ? deadlineKey : declared;
+  // If declared is a custom period (di < 0), always respect it — the user explicitly
+  // assigned it. The deadline badge still shows urgency on the task row.
+  if (di < 0) return declared;
   if (ki < 0) return declared;
   return ki < di ? deadlineKey : declared;
 }
@@ -571,19 +573,33 @@ function periodSortKey(task) {
   // Custom (user-defined) period: insert chronologically among standard periods.
   // Works for both 'weekly' (dynamic getEnd) and 'once' (fixed date) types.
   const cp = customPeriods.find(p => p.key === key);
-  const cpEndMs = cp ? cp.getEnd() : null;
+  // Prefer startDate for positioning 'once' custom periods when available.
+  let cpKeyMs = null;
+  if (cp) {
+    if (cp.type === 'weekly') {
+      // weekly custom: use the window end so it appears after 'questa_settimana'
+      cpKeyMs = cp.getEnd ? cp.getEnd() : null;
+    } else {
+      // once-type: prefer startDate if set, otherwise fall back to end
+      if (cp.startDate) cpKeyMs = new Date(cp.startDate + 'T00:00:00').getTime();
+      else cpKeyMs = cp.getEnd ? cp.getEnd() : null;
+    }
+  }
 
-  if (!cpEndMs) {
+  if (!cpKeyMs) {
     // No end → just before prossima_vita
     const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
     return vitaIdx >= 0 ? vitaIdx - 0.5 : PERIODS.length - 0.5;
   }
 
-  // Walk standard periods in order; place just before the first whose end >= cpEndMs.
+  // Walk standard periods in order; place before the first whose end > cpKeyMs.
+  // Use strict < so equal-end cases (weekly windows ending same day) place the
+  // custom period AFTER the standard period (by returning index - 0.5 for the
+  // following slot).
   for (let i = 0; i < PERIODS.length; i++) {
     const stdEnd = PERIODS[i].getEnd();
     if (stdEnd === null) return i - 0.5;   // hit prossima_vita → insert before it
-    if (cpEndMs <= stdEnd) return Math.max(0.5, i - 0.5);
+    if (cpKeyMs < stdEnd) return Math.max(0.5, i - 0.5);
   }
 
   const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
@@ -949,6 +965,22 @@ async function autoAdvanceOverdueTasks(listId, tasksArray, skipRender = false) {
 
     // ── Custom period cascade: move to a standard period when close to end date ──
     if (isInCustomPeriod) {
+      const cp = customPeriods.find(p => p.key === task.plannedPeriod);
+
+      // Weekly custom periods (e.g. "questo weekend") NEVER cascade to standard
+      // periods — they recur every week. Only update plannedPeriodUntil to keep it
+      // rolling (the window shifts each week).
+      if (cp && cp.type === 'weekly') {
+        const correctEnd = cp.getEnd ? cp.getEnd() : null;
+        if (correctEnd !== null && task.plannedPeriodUntil !== correctEnd) {
+          const update = { plannedPeriodUntil: correctEnd, overdue: false };
+          batch.update(tasksRef(listId).doc(task.id), update);
+          Object.assign(task, update);
+          hasChanges = true;
+        }
+        return;
+      }
+
       if (!task.plannedPeriodUntil) return;
       const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
       let targetPeriod = null;
@@ -1256,8 +1288,11 @@ async function deleteCustomPeriod(key) {
 // ============================================================
 
 let cpmSelectedColor = '#6F8FE3';
+let cpmEditingKey = null;
 
 function openCustomPeriodsModal() {
+  cpmEditingKey = null;
+  setCpmFormMode(false);
   renderCpmList();
   renderCpmColorSwatches();
   const nameEl  = document.getElementById('cpm-name');
@@ -1341,8 +1376,12 @@ function renderCpmList() {
         <span class="cpm-period-name">${escapeHtml(p.label)}</span>
         <span class="cpm-period-dates">${periodInfo}</span>
       </div>
+      <button class="cpm-period-edit"   data-key="${escapeHtml(p.key)}" title="Modifica periodo">✎</button>
       <button class="cpm-period-delete" data-key="${escapeHtml(p.key)}" title="Elimina periodo">🗑</button>
     `;
+    row.querySelector('.cpm-period-edit').addEventListener('click', () => {
+      startEditCustomPeriod(p);
+    });
     row.querySelector('.cpm-period-delete').addEventListener('click', async () => {
       if (!confirm(`Eliminare il periodo "${p.label}"?\nI task assegnati a questo periodo resteranno visibili senza periodo.`)) return;
       await deleteCustomPeriod(p.key);
@@ -1370,6 +1409,60 @@ function renderCpmColorSwatches() {
     });
     container.appendChild(sw);
   });
+}
+
+// Toggle form title + button label between "Nuovo periodo" and "Modifica periodo"
+function setCpmFormMode(editing) {
+  const titleEl  = document.querySelector('.cpm-form-title');
+  const addBtn   = document.getElementById('btn-cpm-add');
+  const cancelBtn= document.getElementById('btn-cpm-cancel-edit');
+  if (titleEl)   titleEl.textContent = editing ? 'Modifica periodo' : 'Nuovo periodo';
+  if (addBtn)    addBtn.textContent  = editing ? '✓ Salva modifiche' : '+ Aggiungi periodo';
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !editing);
+}
+
+// Populate the form with an existing period's data and enter edit mode
+function startEditCustomPeriod(p) {
+  cpmEditingKey    = p.key;
+  cpmSelectedColor = p.color || '#6F8FE3';
+
+  const nameEl  = document.getElementById('cpm-name');
+  const startEl = document.getElementById('cpm-start');
+  const endEl   = document.getElementById('cpm-end');
+  if (nameEl) nameEl.value = p.label;
+
+  if (p.type === 'weekly') {
+    const radio = document.querySelector('input[name="cpm-type"][value="weekly"]');
+    if (radio) { radio.checked = true; toggleCpmTypeSection('weekly'); }
+    const sdow = document.getElementById('cpm-start-dow');
+    const edow = document.getElementById('cpm-end-dow');
+    if (sdow) sdow.value = p.startDow ?? 5;
+    if (edow) edow.value = p.endDow   ?? 0;
+  } else {
+    const radio = document.querySelector('input[name="cpm-type"][value="once"]');
+    if (radio) { radio.checked = true; toggleCpmTypeSection('once'); }
+    if (startEl) startEl.value = p.startDate || '';
+    if (endEl)   endEl.value   = p.endDate   || '';
+  }
+
+  renderCpmColorSwatches();
+  setCpmFormMode(true);
+  document.querySelector('.cpm-add-form')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (nameEl) nameEl.focus();
+}
+
+// Update an existing custom period in Firestore
+async function updateCustomPeriod(key, data) {
+  const snap     = await userDocRef().get();
+  const existing = (snap.exists ? snap.data().customPeriods : null) || [];
+  const idx      = existing.findIndex(p => p.key === key);
+  if (idx < 0) return;
+  const old     = existing[idx];
+  const updated = data.type === 'weekly'
+    ? { ...old, name: data.name, type: 'weekly', startDow: data.startDow, endDow: data.endDow, color: data.color }
+    : { ...old, name: data.name, type: 'once', startDate: data.startDate || null, endDate: data.endDate, color: data.color };
+  existing[idx] = updated;
+  await userDocRef().set({ customPeriods: existing }, { merge: true });
 }
 
 
@@ -3232,7 +3325,7 @@ function bindEvents() {
       const data   = { name, color: cpmSelectedColor, type };
 
       if (type === 'weekly') {
-        data.startDow = parseInt(document.getElementById('cpm-start-dow')?.value ?? '6', 10);
+        data.startDow = parseInt(document.getElementById('cpm-start-dow')?.value ?? '5', 10);
         data.endDow   = parseInt(document.getElementById('cpm-end-dow')?.value   ?? '0', 10);
       } else {
         const startDate = document.getElementById('cpm-start')?.value || '';
@@ -3247,9 +3340,15 @@ function bindEvents() {
       }
 
       btnCpmAdd.disabled = true;
-      await addCustomPeriod(data);
+      if (cpmEditingKey) {
+        await updateCustomPeriod(cpmEditingKey, data);
+        cpmEditingKey = null;
+      } else {
+        await addCustomPeriod(data);
+      }
       btnCpmAdd.disabled = false;
 
+      // Reset form
       document.getElementById('cpm-name').value = '';
       if (document.getElementById('cpm-start')) document.getElementById('cpm-start').value = '';
       if (document.getElementById('cpm-end'))   document.getElementById('cpm-end').value   = '';
@@ -3257,6 +3356,7 @@ function bindEvents() {
       if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
       cpmSelectedColor = '#6F8FE3';
       renderCpmColorSwatches();
+      setCpmFormMode(false);
     });
   }
 
@@ -3264,6 +3364,21 @@ function bindEvents() {
   document.querySelectorAll('input[name="cpm-type"]').forEach(radio => {
     radio.addEventListener('change', () => toggleCpmTypeSection(radio.value));
   });
+
+  const btnCpmCancelEdit = document.getElementById('btn-cpm-cancel-edit');
+  if (btnCpmCancelEdit) {
+    btnCpmCancelEdit.addEventListener('click', () => {
+      cpmEditingKey = null;
+      document.getElementById('cpm-name').value = '';
+      if (document.getElementById('cpm-start')) document.getElementById('cpm-start').value = '';
+      if (document.getElementById('cpm-end'))   document.getElementById('cpm-end').value   = '';
+      const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
+      if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
+      cpmSelectedColor = '#6F8FE3';
+      renderCpmColorSwatches();
+      setCpmFormMode(false);
+    });
+  }
 
   const cpmNameInput = document.getElementById('cpm-name');
   if (cpmNameInput) {
@@ -3558,30 +3673,54 @@ function escapeHtml(str) {
 // ============================================================
 
 function populatePeriodSelect() {
-  const selects = [el.detailPeriod, el.taskPeriodQuick].filter(Boolean);
+  const selects = [el.detailPeriod, el.taskPeriodQuick, el.tlTaskPeriodSel].filter(Boolean);
   selects.forEach(sel => {
     const prevValue = sel.value; // preserve selection across refresh
     sel.innerHTML = '<option value="">— Periodo —</option>';
+
+    // "Ogni giorno" always first (no finite end, would sink to bottom otherwise)
     const optDaily = document.createElement('option');
     optDaily.value       = DAILY_PERIOD.key;
     optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
     sel.appendChild(optDaily);
-    // Custom (user-defined) periods in their own group
-    if (customPeriods.length > 0) {
-      const grp = document.createElement('optgroup');
-      grp.label = 'I miei periodi';
-      customPeriods.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.key; opt.textContent = '◈ ' + p.label;
-        grp.appendChild(opt);
-      });
-      sel.appendChild(grp);
-    }
-    PERIODS.forEach(p => {
+
+    // Sort key for dropdown position:
+    //   • Weekly custom periods → pinned at currentWeekEnd + 1 ms so they always
+    //     appear immediately after "Questa settimana" regardless of the day of week.
+    //     (Using getEnd() directly would place them after "Prossima settimana" on
+    //      Mon–Thu because their next occurrence ends on the same Sunday.)
+    //   • All other periods (standard or once-custom) → their actual getEnd() value.
+    //   • Periods with getEnd() === null → sink to the very bottom.
+    const currentWeekEnd = endOfWeek(new Date());
+    const dropdownSortKey = p => {
+      if (p.isCustom && p.type === 'weekly') return currentWeekEnd + 1;
+      // Once-type custom: if startDate is set, use it so users can explicitly
+      // position the period in the dropdown by editing the start date.
+      if (p.isCustom && p.type === 'once' && p.startDate)
+        return new Date(p.startDate + 'T00:00:00').getTime();
+      return p.getEnd ? p.getEnd() : null;
+    };
+
+    // Merge standard + custom and sort by the key above
+    const all = [
+      ...PERIODS.map(p => ({ p, isCustom: false })),
+      ...customPeriods.map(p => ({ p, isCustom: true })),
+    ].sort((a, b) => {
+      const ka = dropdownSortKey(a.p);
+      const kb = dropdownSortKey(b.p);
+      if (ka === null && kb === null) return 0;
+      if (ka === null) return 1;
+      if (kb === null) return -1;
+      return ka - kb;
+    });
+
+    all.forEach(({ p, isCustom }) => {
       const opt = document.createElement('option');
-      opt.value = p.key; opt.textContent = p.label;
+      opt.value = p.key;
+      opt.textContent = isCustom ? '◈ ' + p.label : p.label;
       sel.appendChild(opt);
     });
+
     // Restore previous selection if it still exists
     if (prevValue) sel.value = prevValue;
   });

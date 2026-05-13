@@ -4108,8 +4108,20 @@ body {
   flex-shrink: 0;
   line-height: 1;
 }
-.cpm-period-row:hover .cpm-period-delete { opacity: 1; }
+.cpm-period-edit {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  transition: color var(--t), background var(--t);
+  opacity: 0;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.cpm-period-row:hover .cpm-period-delete,
+.cpm-period-row:hover .cpm-period-edit { opacity: 1; }
 .cpm-period-delete:hover { color: var(--danger); background: rgba(255,0,34,0.08); }
+.cpm-period-edit:hover   { color: var(--blue);   background: rgba(53,72,192,0.08); }
 
 /* ── Add-form section ── */
 .cpm-add-form {
@@ -4260,5 +4272,20 @@ body {
 }
 .cpm-add-btn:active { transform: translateY(0); box-shadow: none; }
 .cpm-add-btn:disabled { opacity: 0.50; pointer-events: none; }
+
+.cpm-cancel-btn {
+  align-self: flex-start;
+  margin-left: 8px;
+  padding: 10px 18px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: color var(--t), border-color var(--t), background var(--t);
+}
+.cpm-cancel-btn:hover { color: var(--danger); border-color: var(--danger); background: rgba(255,0,34,0.05); }
 
 
