@@ -1074,6 +1074,7 @@ const calState = {
   month: new Date().getMonth(), // 0-indexed
   selectedIso: null,            // "YYYY-MM-DD"
   allTasks: [],                 // flat cache of tasks with .listId
+  completions: [],              // completion-log entries for the displayed month (habit tracker)
 };
 
 
@@ -1157,6 +1158,12 @@ const el = {
   sidebarSearch:        document.getElementById('sidebar-search'),
   homeSearch:           document.getElementById('home-search'),
   homeSearchWrap:       document.getElementById('home-search-wrap'),
+  // Task search (modal — searches tasks + completion history)
+  btnSearch:            document.getElementById('btn-search'),
+  searchBackdrop:       document.getElementById('search-backdrop'),
+  searchInput:          document.getElementById('search-input'),
+  searchResults:        document.getElementById('search-results'),
+  btnSearchClose:       document.getElementById('btn-search-close'),
   // List settings button
   btnListSettings:      document.getElementById('btn-list-settings'),
   // List settings modal
@@ -1185,6 +1192,18 @@ const tasksRef = listId => {
   if (!currentUserUid) throw new Error('No authenticated user');
   return db.collection('users').doc(currentUserUid)
     .collection('lists').doc(listId).collection('tasks');
+};
+
+/**
+ * Per-user log of completion EVENTS — one doc per (task, day) it was
+ * completed. Independent of the task's own `completed` field, which
+ * gets reset on recurring tasks when the day rolls over. This is what
+ * powers the calendar's habit-tracker view and the "past" side of search.
+ * Doc id "<taskId>_<YYYY-MM-DD>" keeps it idempotent per day.
+ */
+const completionsRef = () => {
+  if (!currentUserUid) throw new Error('No authenticated user');
+  return db.collection('users').doc(currentUserUid).collection('completions');
 };
 
 /**
@@ -1495,12 +1514,49 @@ async function addTask(name, periodKey, deadline, recurrence) {
   });
 }
 
-async function updateTask(taskId, data) {
-  await tasksRef(state.activeListId).doc(taskId).update(data);
+/**
+ * Record (or remove) a completion-log entry for today when `data`
+ * contains a `completed` flag. Best-effort: never blocks or fails
+ * the actual task update if the log write has trouble.
+ */
+async function logTaskCompletion(listId, task, newCompleted) {
+  if (!currentUserUid || !task) return;
+  const today   = new Date();
+  const dateIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const docId   = `${task.id}_${dateIso}`;
+  try {
+    if (newCompleted) {
+      const list = state.lists.find(l => l.id === listId);
+      await completionsRef().doc(docId).set({
+        taskId:       task.id,
+        taskName:     task.name || '',
+        listId:       listId,
+        listName:     list ? list.name : '',
+        date:         dateIso,
+        completedAt:  firebase.firestore.FieldValue.serverTimestamp(),
+      });
+    } else {
+      await completionsRef().doc(docId).delete();
+    }
+  } catch (e) {
+    console.warn('logTaskCompletion failed', e);
+  }
 }
 
-async function updateTaskInList(listId, taskId, data) {
+async function updateTask(taskId, data) {
+  await tasksRef(state.activeListId).doc(taskId).update(data);
+  if (Object.prototype.hasOwnProperty.call(data, 'completed')) {
+    const task = state.tasks.find(t => t.id === taskId);
+    if (task) logTaskCompletion(state.activeListId, task, data.completed);
+  }
+}
+
+async function updateTaskInList(listId, taskId, data, taskObj) {
   await tasksRef(listId).doc(taskId).update(data);
+  if (Object.prototype.hasOwnProperty.call(data, 'completed')) {
+    const task = taskObj || state.tasks.find(t => t.id === taskId);
+    if (task) logTaskCompletion(listId, task, data.completed);
+  }
 }
 
 async function deleteTask(taskId) { await tasksRef(state.activeListId).doc(taskId).delete(); }
@@ -1748,7 +1804,7 @@ function listenLists() {
     // Also refresh whichever view is currently active
     if (!el.homepage.classList.contains('hidden'))      renderHomepage();
     if (!el.timelineView.classList.contains('hidden'))  renderTimeline();
-    if (!el.calendarView.classList.contains('hidden'))  { refreshCalendarTasks().then(renderCalendar); }
+    if (!el.calendarView.classList.contains('hidden'))  { refreshCalendarAll().then(renderCalendar); }
 
     if (!el.loading.classList.contains('hidden')) {
       el.loading.classList.add('hidden');
@@ -1794,7 +1850,7 @@ async function showCalendar() {
   if (state.unsubscribeTasks) { state.unsubscribeTasks(); state.unsubscribeTasks = null; }
   closeDetailPanel();
   renderSidebar();
-  await refreshCalendarTasks();
+  await refreshCalendarAll();
   renderCalendar();
 }
 
@@ -2184,7 +2240,7 @@ async function renderTimeline() {
               const updates = { milestones: freshMs };
               if (allDone) Object.assign(updates, buildCompleteUpdate(freshTask, true));
               else if (freshTask.completed) Object.assign(updates, buildCompleteUpdate(freshTask, false));
-              await updateTaskInList(task.listId, task.id, updates);
+              await updateTaskInList(task.listId, task.id, updates, freshTask);
               renderTimeline();
             });
             msRow.appendChild(chip);
@@ -2200,7 +2256,7 @@ async function renderTimeline() {
         e.stopPropagation();
         const nowDone = !isCompletedToday(task);
         const updates = buildCompleteUpdate(task, nowDone);
-        await updateTaskInList(task.listId, task.id, updates);
+        await updateTaskInList(task.listId, task.id, updates, task);
         renderTimeline();
       });
 
@@ -2342,7 +2398,7 @@ function renderTaskList() {
           const updates = { milestones: freshMs };
           if (allDone) Object.assign(updates, buildCompleteUpdate(freshTask, true));
           else if (freshTask.completed) Object.assign(updates, buildCompleteUpdate(freshTask, false));
-          await updateTaskInList(state.activeListId, task.id, updates);
+          await updateTaskInList(state.activeListId, task.id, updates, freshTask);
           renderTaskList();
         });
       });
@@ -2836,19 +2892,27 @@ function bindEvents() {
   if (el.calBtnPrev) el.calBtnPrev.addEventListener('click', () => {
     calState.month--; if (calState.month < 0) { calState.month = 11; calState.year--; }
     calState.selectedIso = null;
-    refreshCalendarTasks().then(renderCalendar);
+    refreshCalendarAll().then(renderCalendar);
   });
   if (el.calBtnNext) el.calBtnNext.addEventListener('click', () => {
     calState.month++; if (calState.month > 11) { calState.month = 0; calState.year++; }
     calState.selectedIso = null;
-    refreshCalendarTasks().then(renderCalendar);
+    refreshCalendarAll().then(renderCalendar);
   });
   if (el.calBtnToday) el.calBtnToday.addEventListener('click', () => {
     const now = new Date();
     calState.year = now.getFullYear(); calState.month = now.getMonth();
     calState.selectedIso = null;
-    refreshCalendarTasks().then(renderCalendar);
+    refreshCalendarAll().then(renderCalendar);
   });
+
+  // Task search modal
+  if (el.btnSearch) el.btnSearch.addEventListener('click', openSearch);
+  if (el.btnSearchClose) el.btnSearchClose.addEventListener('click', closeSearch);
+  if (el.searchBackdrop) el.searchBackdrop.addEventListener('click', e => {
+    if (e.target === el.searchBackdrop) closeSearch();
+  });
+  if (el.searchInput) el.searchInput.addEventListener('input', () => renderSearchResults(el.searchInput.value));
 
   el.btnModalCancel.addEventListener('click', hideModal);
   el.btnModalCreate.addEventListener('click', handleCreateList);
@@ -3261,8 +3325,15 @@ function bindEvents() {
   }
 
   document.addEventListener('keydown', e => {
+    // Ctrl/Cmd+K — open task search from anywhere
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      openSearch();
+      return;
+    }
     if (e.key === 'Escape') {
-      if (!el.modalBackdrop.classList.contains('hidden')) hideModal();
+      if (el.searchBackdrop && !el.searchBackdrop.classList.contains('hidden')) closeSearch();
+      else if (!el.modalBackdrop.classList.contains('hidden')) hideModal();
       else if (!(document.getElementById('custom-periods-backdrop')?.classList.contains('hidden'))) closeCustomPeriodsModal();
       else if (!el.detailPanel.classList.contains('hidden')) closeDetailPanel();
     }
@@ -3448,6 +3519,33 @@ async function refreshCalendarTasks() {
   }
 }
 
+/** Fetch completion-log entries for the currently displayed month (habit tracker) */
+async function refreshCalendarCompletions() {
+  try {
+    const { year, month } = calState;
+    const start   = toIso(year, month + 1, 1);
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const end     = toIso(year, month + 1, lastDay);
+    const snap = await completionsRef()
+      .where('date', '>=', start)
+      .where('date', '<=', end)
+      .get();
+    calState.completions = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    calState.completions = [];
+  }
+}
+
+/** Both fetches in parallel — the pair used everywhere the calendar refreshes */
+async function refreshCalendarAll() {
+  await Promise.all([refreshCalendarTasks(), refreshCalendarCompletions()]);
+}
+
+/** Completion-log entries for a given ISO day, from the cached month */
+function completionsForIso(iso) {
+  return calState.completions.filter(c => c.date === iso);
+}
+
 /**
  * Main calendar renderer.
  * Builds the month grid, marks deadline dots and period-coverage bands.
@@ -3557,11 +3655,25 @@ function renderCalendar() {
         </div>`
       : '';
 
+    // ── Habit tracker: how many activities were completed this day ──
+    const habitCount = completionsForIso(iso).length;
+    const habitHtml = habitCount > 0
+      ? `<span class="cal-habit-badge" title="${habitCount} attività completat${habitCount === 1 ? 'a' : 'e'}">✓${habitCount > 1 ? ` ${habitCount}` : ''}</span>`
+      : '';
+
     cell.innerHTML = `
       ${bandsHtml}
       <span class="cal-day-num">${day}</span>
       ${dotsHtml}
+      ${habitHtml}
     `;
+
+    // Soft green wash scaling with how many things got done — skipped on
+    // today/selected so it never fights their own background treatment.
+    if (habitCount > 0 && !isToday && !isSelected) {
+      const alpha = Math.min(0.08 + habitCount * 0.09, 0.42);
+      cell.style.background = `linear-gradient(160deg, rgba(92,148,110,${alpha}) 0%, rgba(92,148,110,${(alpha * 0.35).toFixed(2)}) 100%)`;
+    }
 
     cell.addEventListener('click', () => selectCalendarDay(iso, periodTasks, dlTasks));
     el.calendarGrid.appendChild(cell);
@@ -3610,6 +3722,14 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
   const listNames = {};
   state.lists.forEach(l => { listNames[l.id] = l.name; });
 
+  // Habit-tracker section — what got completed this day (works for past days too,
+  // since it reads from the permanent completion log rather than live task state)
+  const habitEntries = completionsForIso(iso);
+  if (habitEntries.length > 0) {
+    const sec = buildHabitPanelSection(habitEntries, listNames);
+    el.calDayPanelContent.appendChild(sec);
+  }
+
   // Deadline section
   if (dlTasks.length > 0) {
     const sec = buildCalPanelSection('⏰ Scadenze', dlTasks, listNames, true);
@@ -3623,10 +3743,41 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
     el.calDayPanelContent.appendChild(sec);
   }
 
-  if (dlTasks.length === 0 && periodOnly.length === 0) {
+  if (habitEntries.length === 0 && dlTasks.length === 0 && periodOnly.length === 0) {
     el.calDayPanelContent.innerHTML =
-      '<p class="cal-panel-hint">Nessun task per questo giorno.</p>';
+      '<p class="cal-panel-hint">Nessuna attività per questo giorno.</p>';
   }
+}
+
+/** Build the "✅ Completati" section — reads from the completion log, not live task state */
+function buildHabitPanelSection(entries, listNames) {
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-panel-section';
+  wrap.innerHTML = `<div class="cal-panel-section-title">✅ Completati</div>`;
+
+  const sorted = [...entries].sort((a, b) => {
+    const ta = a.completedAt && typeof a.completedAt.toMillis === 'function' ? a.completedAt.toMillis() : 0;
+    const tb = b.completedAt && typeof b.completedAt.toMillis === 'function' ? b.completedAt.toMillis() : 0;
+    return tb - ta;
+  });
+
+  sorted.forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'cal-panel-row cal-panel-row--habit';
+    row.innerHTML = `
+      <span class="cal-panel-dot cal-panel-dot--habit"></span>
+      <div class="cal-panel-row-body">
+        <span class="cal-panel-row-name">${escapeHtml(entry.taskName || '—')}</span>
+        <div class="cal-panel-row-meta">
+          <span class="tl-list-tag">${escapeHtml(entry.listName || listNames[entry.listId] || '–')}</span>
+        </div>
+      </div>
+    `;
+    row.addEventListener('click', () => openList(entry.listId, entry.taskId));
+    wrap.appendChild(row);
+  });
+
+  return wrap;
 }
 
 /** Build a titled section of task rows for the calendar day panel */
@@ -3654,6 +3805,145 @@ function buildCalPanelSection(title, tasks, listNames, isDeadline) {
   });
 
   return wrap;
+}
+
+
+// ============================================================
+// TASK SEARCH — modal that searches both live tasks and the
+// completion-log history ("cerca task del passato o correnti")
+// ============================================================
+
+// Cache filled fresh every time the modal opens
+let searchCache = null;
+
+async function openSearch() {
+  if (!el.searchBackdrop) return;
+  el.searchBackdrop.classList.remove('hidden');
+  el.searchInput.value = '';
+  el.searchResults.innerHTML =
+    '<p class="search-hint">Digita per cercare tra i tuoi task, passati e presenti.</p>';
+  requestAnimationFrame(() => el.searchInput.focus());
+
+  const [tasks, completions] = await Promise.all([fetchAllTasks(), fetchAllCompletions()]);
+  searchCache = { tasks, completions };
+}
+
+function closeSearch() {
+  if (!el.searchBackdrop) return;
+  el.searchBackdrop.classList.add('hidden');
+}
+
+/** Fetch completion-log entries across all time (capped, most recent first) */
+async function fetchAllCompletions() {
+  try {
+    const snap = await completionsRef().orderBy('date', 'desc').limit(500).get();
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    return [];
+  }
+}
+
+/** Lowercase + accent-insensitive, for forgiving search matching */
+function normalizeSearch(str) {
+  return (str || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function searchRelevance(name, q) {
+  const n = normalizeSearch(name);
+  if (n === q) return 0;
+  if (n.startsWith(q)) return 1;
+  return 2;
+}
+
+function formatFriendlyDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d} ${IT_MONTHS[m - 1]} ${y}`;
+}
+
+/** Open the calendar on the month/day of a past completion */
+async function jumpToCalendarDay(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  calState.year = y;
+  calState.month = m - 1;
+  calState.selectedIso = iso;
+  await showCalendar();
+}
+
+function renderSearchResults(rawQuery) {
+  if (!searchCache || !el.searchResults) return;
+  const q = normalizeSearch(rawQuery);
+  el.searchResults.innerHTML = '';
+
+  if (!q) {
+    el.searchResults.innerHTML =
+      '<p class="search-hint">Digita per cercare tra i tuoi task, passati e presenti.</p>';
+    return;
+  }
+
+  const listNames = {};
+  state.lists.forEach(l => { listNames[l.id] = l.name; });
+
+  const matchedTasks = searchCache.tasks
+    .filter(t => normalizeSearch(t.name).includes(q))
+    .sort((a, b) => searchRelevance(a.name, q) - searchRelevance(b.name, q) || (a.name || '').localeCompare(b.name || ''))
+    .slice(0, 30);
+
+  const matchedCompletions = searchCache.completions
+    .filter(c => normalizeSearch(c.taskName).includes(q))
+    .slice(0, 30);
+
+  if (matchedTasks.length === 0 && matchedCompletions.length === 0) {
+    el.searchResults.innerHTML =
+      `<p class="search-hint">Nessun risultato per «${escapeHtml(rawQuery.trim())}».</p>`;
+    return;
+  }
+
+  if (matchedTasks.length > 0) {
+    const sec = document.createElement('div');
+    sec.className = 'search-section';
+    sec.innerHTML = `<div class="search-section-title">📋 Task</div>`;
+    matchedTasks.forEach(task => {
+      const isDone = !!task.completed;
+      const row = document.createElement('div');
+      row.className = 'search-row';
+      row.innerHTML = `
+        <span class="search-row-status ${isDone ? 'done' : ''}"></span>
+        <div class="search-row-body">
+          <span class="search-row-name">${escapeHtml(task.name)}</span>
+          <div class="search-row-meta">
+            <span class="tl-list-tag">${escapeHtml(listNames[task.listId] || '–')}</span>
+            <span class="search-row-pill ${isDone ? 'pill-done' : 'pill-active'}">${isDone ? 'Completato' : 'In corso'}</span>
+          </div>
+        </div>
+      `;
+      row.addEventListener('click', () => { closeSearch(); openList(task.listId, task.id); });
+      sec.appendChild(row);
+    });
+    el.searchResults.appendChild(sec);
+  }
+
+  if (matchedCompletions.length > 0) {
+    const sec = document.createElement('div');
+    sec.className = 'search-section';
+    sec.innerHTML = `<div class="search-section-title">🌱 Cronologia completamenti</div>`;
+    matchedCompletions.forEach(entry => {
+      const row = document.createElement('div');
+      row.className = 'search-row';
+      row.innerHTML = `
+        <span class="search-row-status done"></span>
+        <div class="search-row-body">
+          <span class="search-row-name">${escapeHtml(entry.taskName || '—')}</span>
+          <div class="search-row-meta">
+            <span class="tl-list-tag">${escapeHtml(entry.listName || listNames[entry.listId] || '–')}</span>
+            <span class="search-row-date">${formatFriendlyDate(entry.date)}</span>
+          </div>
+        </div>
+      `;
+      row.addEventListener('click', () => { closeSearch(); jumpToCalendarDay(entry.date); });
+      sec.appendChild(row);
+    });
+    el.searchResults.appendChild(sec);
+  }
 }
 
 
@@ -3725,6 +4015,47 @@ function populatePeriodSelect() {
     if (prevValue) sel.value = prevValue;
   });
 }
+
+// ============================================================
+// FEEDBACK ERRORI DI SALVATAGGIO
+// ============================================================
+function showToast(msg) {
+  let t = document.getElementById('app-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'app-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._hideTimer);
+  t._hideTimer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+function withErrorFeedback(fn, label) {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      console.error(`[${label}]`, err);
+      showToast('⚠️ Salvataggio non riuscito. Controlla la connessione e riprova.');
+      throw err;
+    }
+  };
+}
+
+updateList        = withErrorFeedback(updateList, 'updateList');
+deleteList        = withErrorFeedback(deleteList, 'deleteList');
+addCustomPeriod   = withErrorFeedback(addCustomPeriod, 'addCustomPeriod');
+deleteCustomPeriod= withErrorFeedback(deleteCustomPeriod, 'deleteCustomPeriod');
+updateCustomPeriod= withErrorFeedback(updateCustomPeriod, 'updateCustomPeriod');
+addTask           = withErrorFeedback(addTask, 'addTask');
+updateTask        = withErrorFeedback(updateTask, 'updateTask');
+updateTaskInList  = withErrorFeedback(updateTaskInList, 'updateTaskInList');
+deleteTask        = withErrorFeedback(deleteTask, 'deleteTask');
+addMilestone      = withErrorFeedback(addMilestone, 'addMilestone');
+toggleMilestone   = withErrorFeedback(toggleMilestone, 'toggleMilestone');
+deleteMilestone   = withErrorFeedback(deleteMilestone, 'deleteMilestone');
 
 function init() {
   populatePeriodSelect();

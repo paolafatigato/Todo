@@ -34,6 +34,7 @@
         <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
         <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
         <button id="btn-calendar" title="Calendario">◫ Calendario</button>
+        <button id="btn-search" title="Cerca un task (Ctrl+K)">🔍 Cerca</button>
         <button id="btn-manage-periods" title="Gestisci periodi personalizzati">◈ Periodi</button>
       </div>
       <div id="mobile-logout-trigger" class="hidden" title="Menu logout"></div>
@@ -561,12 +562,38 @@
     </div>
   </div>
 
+  <!-- ======================================================
+       SEARCH MODAL — cerca tra task attivi/completati e
+       cronologia dei completamenti (passato)
+  ====================================================== -->
+  <div id="search-backdrop" class="hidden">
+    <div id="search-modal">
+      <div class="search-modal-header">
+        <div class="search-input-wrap">
+          <span class="search-input-icon">🔍</span>
+          <input id="search-input" type="text" placeholder="Cerca un task, passato o presente…" autocomplete="off" />
+        </div>
+        <button id="btn-search-close" title="Chiudi">✕</button>
+      </div>
+      <div id="search-results">
+        <p class="search-hint">Digita per cercare tra i tuoi task, passati e presenti.</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Firebase SDKs (v8 compat) -->
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
   <script src="firebase-config.js"></script>
   <script type="module" src="app.js"></script>
+  <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW registration failed', err));
+    });
+  }
+</script>
 
   <!-- AUTH OVERLAY -->
   <div id="auth-overlay" class="hidden">
