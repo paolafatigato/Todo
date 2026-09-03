@@ -1257,6 +1257,21 @@ async function deleteList(listId) {
   snapshot.forEach(d => batch.delete(d.ref));
   batch.delete(listsRef().doc(listId));
   await batch.commit();
+  deleteCompletionLogForList(listId);
+}
+
+/** Remove all completion-log entries tied to a deleted list, so its tasks
+ *  stop showing up as "done" in the calendar/search history. Best-effort. */
+async function deleteCompletionLogForList(listId) {
+  try {
+    const snap = await completionsRef().where('listId', '==', listId).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch (e) {
+    console.warn('deleteCompletionLogForList failed', e);
+  }
 }
 
 
@@ -1515,15 +1530,20 @@ async function addTask(name, periodKey, deadline, recurrence) {
 }
 
 /**
- * Record (or remove) a completion-log entry for today when `data`
- * contains a `completed` flag. Best-effort: never blocks or fails
- * the actual task update if the log write has trouble.
+ * Record (or remove) a completion-log entry when `data` contains a
+ * `completed` flag. Defaults to today; pass `explicitDateIso` to log
+ * a different day (used by the backfill below to recover real history
+ * from a one-off task's own `completedAt` timestamp).
+ * Best-effort: never blocks or fails the actual task update.
  */
-async function logTaskCompletion(listId, task, newCompleted) {
+async function logTaskCompletion(listId, task, newCompleted, explicitDateIso) {
   if (!currentUserUid || !task) return;
-  const today   = new Date();
-  const dateIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
-  const docId   = `${task.id}_${dateIso}`;
+  let dateIso = explicitDateIso;
+  if (!dateIso) {
+    const today = new Date();
+    dateIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  }
+  const docId = `${task.id}_${dateIso}`;
   try {
     if (newCompleted) {
       const list = state.lists.find(l => l.id === listId);
@@ -1540,6 +1560,39 @@ async function logTaskCompletion(listId, task, newCompleted) {
     }
   } catch (e) {
     console.warn('logTaskCompletion failed', e);
+  }
+}
+
+/**
+ * One-time-per-open recovery pass: the completion log only exists going
+ * forward from when this feature shipped, so anything completed earlier
+ * has no entry yet. This recovers what it can — a one-off task's own
+ * `completedAt` timestamp still holds its TRUE completion date, so those
+ * get logged on that real historical day. Recurring/daily tasks reset
+ * every day, so only today's occurrence (if currently completed) is
+ * recoverable — earlier days of a habit are genuinely gone. Safe to
+ * re-run: doc ids are deterministic per (task, day), so it just overwrites.
+ */
+async function backfillCompletionLog() {
+  try {
+    const allTasks = await fetchAllTasks();
+    const jobs = [];
+    allTasks.forEach(t => {
+      if (isRecurringTask(t) || t.plannedPeriod === 'ogni_giorno') {
+        if (isDailyTaskEffectivelyCompleted(t)) jobs.push(logTaskCompletion(t.listId, t, true));
+        return;
+      }
+      if (!t.completed) return;
+      let dateIso = null;
+      if (t.completedAt && typeof t.completedAt.toDate === 'function') {
+        const d = t.completedAt.toDate();
+        dateIso = toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      }
+      jobs.push(logTaskCompletion(t.listId, t, true, dateIso));
+    });
+    await Promise.all(jobs);
+  } catch (e) {
+    console.warn('backfillCompletionLog failed', e);
   }
 }
 
@@ -1850,6 +1903,7 @@ async function showCalendar() {
   if (state.unsubscribeTasks) { state.unsubscribeTasks(); state.unsubscribeTasks = null; }
   closeDetailPanel();
   renderSidebar();
+  await backfillCompletionLog();
   await refreshCalendarAll();
   renderCalendar();
 }
@@ -3710,6 +3764,8 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
   const date = new Date(y, m - 1, d);
   const dayNames = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
   const today = new Date(); today.setHours(0,0,0,0);
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  const isPast = iso < todayIso;
   const diff = Math.round((date - today) / 86400000);
   const sub = diff === 0 ? 'Oggi' : diff === 1 ? 'Domani' : diff === -1 ? 'Ieri' : diff < 0 ? `${-diff} giorni fa` : `Fra ${diff} giorni`;
 
@@ -3730,22 +3786,26 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
     el.calDayPanelContent.appendChild(sec);
   }
 
-  // Deadline section
-  if (dlTasks.length > 0) {
-    const sec = buildCalPanelSection('⏰ Scadenze', dlTasks, listNames, true);
-    el.calDayPanelContent.appendChild(sec);
+  // Scheduling info ("Scadenze" / "In programma") only makes sense for
+  // today and the future — a past day is done, so just show what happened.
+  let periodOnly = [];
+  if (!isPast) {
+    if (dlTasks.length > 0) {
+      const sec = buildCalPanelSection('⏰ Scadenze', dlTasks, listNames, true);
+      el.calDayPanelContent.appendChild(sec);
+    }
+    periodOnly = periodTasks.filter(t => !dlTasks.find(d => d.id === t.id));
+    if (periodOnly.length > 0) {
+      const sec = buildCalPanelSection('📅 In programma', periodOnly, listNames, false);
+      el.calDayPanelContent.appendChild(sec);
+    }
   }
 
-  // Period section
-  const periodOnly = periodTasks.filter(t => !dlTasks.find(d => d.id === t.id));
-  if (periodOnly.length > 0) {
-    const sec = buildCalPanelSection('📅 In programma', periodOnly, listNames, false);
-    el.calDayPanelContent.appendChild(sec);
-  }
-
-  if (habitEntries.length === 0 && dlTasks.length === 0 && periodOnly.length === 0) {
-    el.calDayPanelContent.innerHTML =
-      '<p class="cal-panel-hint">Nessuna attività per questo giorno.</p>';
+  const nothingToShow = habitEntries.length === 0 && (isPast || (dlTasks.length === 0 && periodOnly.length === 0));
+  if (nothingToShow) {
+    el.calDayPanelContent.innerHTML = isPast
+      ? '<p class="cal-panel-hint">Nessuna attività completata questo giorno.</p>'
+      : '<p class="cal-panel-hint">Nessuna attività per questo giorno.</p>';
   }
 }
 
