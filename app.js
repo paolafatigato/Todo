@@ -1573,26 +1573,44 @@ async function logTaskCompletion(listId, task, newCompleted, explicitDateIso) {
  * `completedAt` timestamp still holds its TRUE completion date, so those
  * get logged on that real historical day. Recurring/daily tasks reset
  * every day, so only today's occurrence (if currently completed) is
- * recoverable — earlier days of a habit are genuinely gone. Safe to
- * re-run: doc ids are deterministic per (task, day), so it just overwrites.
+ * recoverable — earlier days of a habit are genuinely gone.
+ *
+ * Never guesses: a one-off task with no resolvable `completedAt` is left
+ * OUT of the log entirely rather than being stamped as "done today". It
+ * also cleans up any stray "today" entry an earlier version of this
+ * function may have wrongly created for such a task. Safe to re-run:
+ * doc ids are deterministic per (task, day).
  */
 async function backfillCompletionLog() {
   try {
+    const today = new Date();
+    const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
     const allTasks = await fetchAllTasks();
     const jobs = [];
+
     allTasks.forEach(t => {
       if (isRecurringTask(t) || t.plannedPeriod === 'ogni_giorno') {
         if (isDailyTaskEffectivelyCompleted(t)) jobs.push(logTaskCompletion(t.listId, t, true));
         return;
       }
       if (!t.completed) return;
-      let dateIso = null;
+
       if (t.completedAt && typeof t.completedAt.toDate === 'function') {
         const d = t.completedAt.toDate();
-        dateIso = toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+        const realIso = toIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+        jobs.push(logTaskCompletion(t.listId, t, true, realIso));
+        // Clean up a stray "today" entry from an earlier, buggier backfill
+        // if the task's real completion day is actually a different day.
+        if (realIso !== todayIso) {
+          jobs.push(completionsRef().doc(`${t.id}_${todayIso}`).delete().catch(() => {}));
+        }
+      } else {
+        // No resolvable completedAt: don't guess the day — just make sure
+        // no incorrect "today" entry lingers from before this fix.
+        jobs.push(completionsRef().doc(`${t.id}_${todayIso}`).delete().catch(() => {}));
       }
-      jobs.push(logTaskCompletion(t.listId, t, true, dateIso));
     });
+
     await Promise.all(jobs);
   } catch (e) {
     console.warn('backfillCompletionLog failed', e);
