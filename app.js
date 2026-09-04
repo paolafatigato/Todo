@@ -4091,13 +4091,9 @@ function populatePeriodSelect() {
     //   • Periods with getEnd() === null → sink to the very bottom.
     const currentWeekEnd = endOfWeek(new Date());
     const dropdownSortKey = p => {
-      if (p.isCustom && p.type === 'weekly') return currentWeekEnd + 1;
-      // Once-type custom: if startDate is set, use it so users can explicitly
-      // position the period in the dropdown by editing the start date.
-      if (p.isCustom && p.type === 'once' && p.startDate)
-        return new Date(p.startDate + 'T00:00:00').getTime();
-      return p.getEnd ? p.getEnd() : null;
-    };
+  if (p.isCustom && p.type === 'weekly') return currentWeekEnd + 1;
+  return p.getEnd ? p.getEnd() : null;
+};
 
     // Merge standard + custom and sort by the key above
     const all = [
