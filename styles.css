@@ -1266,7 +1266,7 @@ body {
   #sidebar-search-wrap { display: none !important; }
 
   /* Main area height */
-  #main { height: calc(100vh - 80px); }
+  #main { height: 100vh;  }
 
   /* List header / task list */
   #list-header { padding: 16px 18px 0; }
@@ -1334,6 +1334,97 @@ body {
   --detail-w: 100%;
 }
 
+/* ============================================================
+   MOBILE MENU TRIGGER — cerchio giallo che sostituisce l'indice
+   in alto: apre/chiude la sidebar come dropdown ancorato
+   ============================================================ */
+.mobile-menu-fab {
+  display: none; /* visibile solo sotto i 700px, vedi media query */
+}
+
+@media (max-width: 700px) {
+
+  /* Il cerchio, fisso in alto a destra */
+  .mobile-menu-fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 12px;
+    right: 14px;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--yellow);
+    color: var(--blue);
+    font-size: 1.05rem;
+    font-weight: 700;
+    box-shadow: var(--shadow-lg);
+    z-index: 150;
+    transition: transform var(--t), background var(--t);
+  }
+
+  .mobile-menu-fab:hover,
+  .mobile-menu-fab:active { transform: scale(1.08); }
+
+  body.mobile-menu-open .mobile-menu-fab { background: var(--pink); }
+
+  /* Di default la sidebar è nascosta: il cerchio la sostituisce */
+  body:not(.mobile-menu-open) #sidebar { display: none; }
+
+  /* Aperta, la sidebar diventa un dropdown ancorato sotto il cerchio */
+  body.mobile-menu-open #sidebar {
+    position: fixed;
+    top: 60px;
+    right: 14px;
+    left: auto;
+    width: 220px;
+    max-height: calc(100vh - 76px);
+    overflow-y: auto;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    z-index: 150;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body.mobile-menu-open #sidebar::before { display: none; }
+
+  body.mobile-menu-open #sidebar-header {
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.14);
+    padding: 14px 14px 10px;
+    justify-content: space-between;
+  }
+
+  body.mobile-menu-open #sidebar-new-btn-wrap {
+    border-right: none;
+    padding: 0;
+  }
+
+  body.mobile-menu-open #sidebar-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 10px 12px 12px;
+  }
+
+  body.mobile-menu-open #sidebar-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  body.mobile-menu-open #btn-home,
+  body.mobile-menu-open #btn-timeline,
+  body.mobile-menu-open #btn-calendar,
+  body.mobile-menu-open #btn-search,
+  body.mobile-menu-open #btn-manage-periods {
+    width: 100%;
+    text-align: left;
+    font-size: 0.85rem;
+    padding: 9px 10px;
+  }
+}
 /* ----------------------------------------------------------
    AUTH OVERLAY
    ---------------------------------------------------------- */

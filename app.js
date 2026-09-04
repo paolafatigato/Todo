@@ -1082,6 +1082,9 @@ const calState = {
 // DOM REFERENCES
 // ============================================================
 const el = {
+    sidebar:              document.getElementById('sidebar'),
+  btnMobileMenu:        document.getElementById('btn-mobile-menu'),
+  listsNav:             document.getElementById('lists-nav'),
   listsNav:             document.getElementById('lists-nav'),
   btnNewList:           document.getElementById('btn-new-list'),
   btnHome:              document.getElementById('btn-home'),
@@ -1612,7 +1615,24 @@ async function updateTaskInList(listId, taskId, data, taskObj) {
   }
 }
 
-async function deleteTask(taskId) { await tasksRef(state.activeListId).doc(taskId).delete(); }
+async function deleteTask(taskId) {
+  await tasksRef(state.activeListId).doc(taskId).delete();
+  deleteCompletionLogForTask(taskId);
+}
+
+/** Remove all completion-log entries for a deleted task, so it stops
+ *  showing up as "done" in the calendar/search history. Best-effort. */
+async function deleteCompletionLogForTask(taskId) {
+  try {
+    const snap = await completionsRef().where('taskId', '==', taskId).get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch (e) {
+    console.warn('deleteCompletionLogForTask failed', e);
+  }
+}
 
 let notesTimer;
 function saveNotesDebounced(taskId, notes) {
@@ -2941,6 +2961,34 @@ function bindEvents() {
   el.btnHome.addEventListener('click', showHomepage);
   el.btnTimeline.addEventListener('click', showTimeline);
   if (el.btnCalendar) el.btnCalendar.addEventListener('click', showCalendar);
+    // ── Cerchio giallo mobile: apre/chiude l'indice come dropdown ──
+  if (el.btnMobileMenu) {
+    el.btnMobileMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.body.classList.toggle('mobile-menu-open');
+    });
+  }
+  // Chiude il dropdown quando si sceglie una voce di navigazione
+  if (el.btnNewList) {
+    el.btnNewList.addEventListener('click', () => document.body.classList.remove('mobile-menu-open'));
+  }
+  const sidebarFooterEl = document.getElementById('sidebar-footer');
+  if (sidebarFooterEl) {
+    sidebarFooterEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (btn && btn.id !== 'mobile-logout-trigger') {
+        document.body.classList.remove('mobile-menu-open');
+      }
+    });
+  }
+  // Chiude il dropdown cliccando fuori dalla sidebar
+  document.addEventListener('click', (e) => {
+    if (document.body.classList.contains('mobile-menu-open') &&
+        el.sidebar && !el.sidebar.contains(e.target) &&
+        el.btnMobileMenu && !el.btnMobileMenu.contains(e.target)) {
+      document.body.classList.remove('mobile-menu-open');
+    }
+  });
 
   // Calendar navigation
   if (el.calBtnPrev) el.calBtnPrev.addEventListener('click', () => {
