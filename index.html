@@ -27,14 +27,13 @@
       <button id="btn-new-list" title="Nuova lista">+</button>
     </div>
   </div>
-  <div id="sidebar-search-wrap">
-    <input id="sidebar-search" type="text" placeholder="Cerca lista…" autocomplete="off" />
-  </div>
   <div id="sidebar-buttons">
+    <div id="sidebar-task-search-wrap">
+      <input id="sidebar-task-search" type="text" placeholder="Cerca un task…" autocomplete="off" title="Cerca un task (Ctrl+K)" />
+    </div>
     <button id="btn-home" title="Tutte le liste">⊞ Tutte le liste</button>
     <button id="btn-timeline" title="Vista agenda">≋ Agenda</button>
     <button id="btn-calendar" title="Calendario">◫ Calendario</button>
-    <button id="btn-search" title="Cerca un task (Ctrl+K)">🔍 Cerca</button>
     <button id="btn-manage-periods" title="Gestisci periodi personalizzati">◈ Periodi</button>
   </div>
   <ul id="lists-nav" role="list"></ul>
@@ -185,7 +184,30 @@
       <header id="timeline-header">
         <h1>Agenda</h1>
         <div class="timeline-header-right">
-          <button id="btn-timeline-quick-add" title="Aggiungi task urgente">⚡</button>
+          <button id="btn-timeline-quick-add" title="Aggiungi task urgente">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--blue)" aria-hidden="true">
+              <path d="M13 2 4 14h6l-1 8 9-12h-6z"/>
+            </svg>
+          </button>
+          <button id="btn-timeline-new-task" title="Nuovo task (scheda completa)">+</button>
+          <div class="tl-frequent-wrap">
+            <button id="btn-timeline-frequent" title="Task frequenti">
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="var(--blue)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="17 1 21 5 17 9"></polyline>
+                <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                <polyline points="7 23 3 19 7 15"></polyline>
+                <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+              </svg>
+            </button>
+            <div id="timeline-frequent-popover" class="hidden">
+              <div class="tl-frequent-title">Task frequenti</div>
+              <ul id="tl-frequent-list"></ul>
+              <div class="tl-frequent-add-row">
+                <input id="tl-frequent-input" type="text" placeholder="Nuovo task frequente…" autocomplete="off" />
+                <button id="btn-tl-frequent-add" title="Salva nella lista">＋</button>
+              </div>
+            </div>
+          </div>
           <label class="toggle-completed-label">
             <input type="checkbox" id="toggle-show-completed" />
             Mostra completati
@@ -286,6 +308,7 @@
             <option value="weekly">Ogni settimana</option>
             <option value="yearly">Ogni anno</option>
             <option value="custom">Personalizza</option>
+            <option value="frequent">Frequente ⏬</option>
           </select>
         </div>
 
@@ -391,6 +414,34 @@
             </select>
           </div>
         </div>
+      </div>
+
+      <!-- HABIT TRACKER — visibile solo per task ricorrenti -->
+      <div class="detail-section habit-section hidden" id="detail-habit-section">
+        <div class="detail-section-title">Abitudine</div>
+
+        <div class="habit-stats-row">
+          <div class="habit-stat">
+            <span class="habit-stat-value" id="habit-stat-days">0</span>
+            <span class="habit-stat-label">giorni</span>
+          </div>
+          <div class="habit-stat">
+            <span class="habit-stat-value" id="habit-stat-streak">0</span>
+            <span class="habit-stat-label">streak 🔥</span>
+          </div>
+          <div class="habit-stat">
+            <span class="habit-stat-value" id="habit-stat-pct">—</span>
+            <span class="habit-stat-label">successo</span>
+          </div>
+        </div>
+
+        <div class="habit-cal-header">
+          <button type="button" id="habit-cal-prev" title="Mese precedente">&#8592;</button>
+          <span id="habit-cal-month-label">—</span>
+          <button type="button" id="habit-cal-next" title="Mese successivo">&#8594;</button>
+        </div>
+        <div class="habit-cal-grid" id="habit-cal-grid"></div>
+        <span class="habit-cal-hint">Tocca un giorno per segnarlo fatto/non fatto</span>
       </div>
 
       <!-- PROGRESS & MILESTONES -->

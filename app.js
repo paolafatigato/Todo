@@ -61,6 +61,10 @@ const DAILY_PERIOD = {
 // Each entry mirrors the PERIODS structure but has isCustom: true.
 let customPeriods = [];           // array of period objects (with getEnd/getStart)
 let unsubscribeCustomPeriods = null;
+let frequentTasks = [];           // [{key, name}] — task salvati per riuso rapido, non ricorrenze fisse
+
+// ─── HABIT TRACKER PANEL — stato del mini-calendario nella scheda task ──
+let habitPanelState = { taskId: null, listId: null, entries: [], year: 0, month: 0 };
 
 /**
  * Convert a raw Firestore custom-period record into a live period object
@@ -478,6 +482,148 @@ function getRecurrenceLabel(rec) {
   }
 
   return '';
+}
+
+// ─── HABIT TRACKER — statistiche (giorni, streak, % successo) ─
+// Usa il log storico dei completamenti (completions), indipendente
+// dallo stato "live" del task, così funziona anche nel passato.
+
+/** Chiave del "periodo" (settimana/mese/anno) a cui appartiene una data, per tipo di ricorrenza */
+function habitPeriodKeyForDate(rec, d) {
+  if (rec.type === 'weekly') {
+    const day = d.getDay();
+    const daysToMon = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d); monday.setDate(d.getDate() + daysToMon);
+    return toIso(monday.getFullYear(), monday.getMonth() + 1, monday.getDate());
+  }
+  if (rec.type === 'yearly' || (rec.type === 'custom' && rec.subType === 'nthWeekday' && rec.nthScope === 'year')) {
+    return String(d.getFullYear());
+  }
+  if (rec.type === 'daily' || (rec.type === 'custom' && !rec.subType)) {
+    return toIso(d.getFullYear(), d.getMonth() + 1, d.getDate()); // un giorno = un periodo
+  }
+  return `${d.getFullYear()}-${d.getMonth() + 1}`; // monthly / custom mensile
+}
+
+/** Un passo indietro di un "periodo" (giorno/settimana/mese/anno) a seconda del tipo */
+function habitStepBackPeriod(rec, d) {
+  const c = new Date(d);
+  if (rec.type === 'daily' || (rec.type === 'custom' && !rec.subType)) { c.setDate(c.getDate() - 1); return c; }
+  if (rec.type === 'weekly') { c.setDate(c.getDate() - 7); return c; }
+  if (rec.type === 'yearly' || (rec.type === 'custom' && rec.subType === 'nthWeekday' && rec.nthScope === 'year')) {
+    c.setFullYear(c.getFullYear() - 1); return c;
+  }
+  c.setMonth(c.getMonth() - 1); return c;
+}
+
+/** Quanti "periodi" previsti dalla ricorrenza cadono tra fromDate e toDate (incluse) */
+function countScheduledOccurrences(rec, fromDate, toDate) {
+  if (!rec || !rec.type || fromDate > toDate) return 0;
+
+  if (rec.type === 'daily' || (rec.type === 'custom' && !rec.subType)) {
+    const days = (rec.days && rec.days.length > 0) ? rec.days : [0,1,2,3,4,5,6];
+    let count = 0;
+    const d = new Date(fromDate);
+    while (d <= toDate) {
+      if (days.includes(d.getDay())) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  }
+
+  // Per gli altri tipi, contiamo semplicemente quanti "periodi" distinti
+  // (settimane/mesi/anni) sono coperti dall'intervallo.
+  const seen = new Set();
+  const d = new Date(fromDate);
+  let guard = 0;
+  while (d <= toDate && guard < 20000) {
+    seen.add(habitPeriodKeyForDate(rec, d));
+    d.setDate(d.getDate() + 1);
+    guard++;
+  }
+  return seen.size;
+}
+
+/** Quanti "periodi" distinti risultano completati, dato il log delle entries del task */
+function countCompletedPeriods(rec, entries) {
+  if (!rec || !rec.type) return entries.length;
+  if (rec.type === 'daily' || (rec.type === 'custom' && !rec.subType)) return entries.length; // un'entry = un giorno
+  const buckets = new Set();
+  entries.forEach(e => {
+    const [y, m, d] = e.date.split('-').map(Number);
+    buckets.add(habitPeriodKeyForDate(rec, new Date(y, m - 1, d)));
+  });
+  return buckets.size;
+}
+
+/**
+ * Streak corrente (numero di periodi consecutivi completati, terminando
+ * a oggi). Se il periodo corrente non è ancora stato completato, si
+ * parte a contare dal periodo precedente (non rompe lo streak finché
+ * il periodo è ancora "aperto").
+ */
+function computeHabitStreak(task, entries) {
+  const rec = task.recurrence;
+  if (!rec || !rec.type) return 0;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+
+  const doneKeys = new Set();
+  entries.forEach(e => {
+    const [y, m, d] = e.date.split('-').map(Number);
+    doneKeys.add(habitPeriodKeyForDate(rec, new Date(y, m - 1, d)));
+  });
+
+  let cursor = new Date(today);
+  if (!doneKeys.has(habitPeriodKeyForDate(rec, cursor))) {
+    cursor = habitStepBackPeriod(rec, cursor);
+  }
+
+  let streak = 0;
+  let guard = 0;
+  while (doneKeys.has(habitPeriodKeyForDate(rec, cursor)) && guard < 5000) {
+    streak++;
+    cursor = habitStepBackPeriod(rec, cursor);
+    guard++;
+  }
+  return streak;
+}
+
+/**
+ * Attiva/disattiva il completamento di un task ricorrente per un giorno
+ * specifico (oggi o nel passato — mai nel futuro). Scrive sempre nel log
+ * storico (completions), e se il giorno toccato rientra nel periodo
+ * attivo corrente del task sincronizza anche lo stato "live"
+ * (completed/lastCompletedDate), così la spunta nella lista resta
+ * coerente. Ritorna il nuovo stato (true/false) oppure null se il giorno
+ * è nel futuro (operazione ignorata).
+ */
+async function toggleHabitDay(task, iso, listId) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+  if (iso > todayIso) return null;
+
+  let wasDone = false;
+  try {
+    const doc = await completionsRef().doc(`${task.id}_${iso}`).get();
+    wasDone = doc.exists;
+  } catch (e) { wasDone = false; }
+  const newDone = !wasDone;
+
+  await logTaskCompletion(listId, task, newDone, iso);
+
+  if (isRecurringTask(task)) {
+    const periodStart = getRecurrencePeriodStart(task.recurrence);
+    if (periodStart && iso >= periodStart) {
+      try {
+        await tasksRef(listId).doc(task.id).update({
+          completed:        newDone,
+          lastCompletedDate: newDone ? iso : null,
+          completedAt:       newDone ? firebase.firestore.FieldValue.serverTimestamp() : null,
+        });
+      } catch (e) { console.warn('toggleHabitDay: sync stato live fallito', e); }
+    }
+  }
+  return newDone;
 }
 
 // ─── LIST COLOR PALETTE ────────────────────────────────────────
@@ -1149,8 +1295,23 @@ const el = {
   addMilestoneInput:    document.getElementById('add-milestone-input'),
   btnAddMilestone:      document.getElementById('btn-add-milestone'),
   btnApplyDefaultMs:    document.getElementById('btn-apply-default-ms'),
+  // Habit tracker (dentro la scheda task, solo per ricorrenti)
+  detailHabitSection:   document.getElementById('detail-habit-section'),
+  habitStatDays:        document.getElementById('habit-stat-days'),
+  habitStatStreak:      document.getElementById('habit-stat-streak'),
+  habitStatPct:         document.getElementById('habit-stat-pct'),
+  habitCalPrev:         document.getElementById('habit-cal-prev'),
+  habitCalNext:         document.getElementById('habit-cal-next'),
+  habitCalMonthLabel:   document.getElementById('habit-cal-month-label'),
+  habitCalGrid:         document.getElementById('habit-cal-grid'),
   // Timeline quick-add
   btnTimelineQuickAdd:  document.getElementById('btn-timeline-quick-add'),
+  btnTimelineNewTask:   document.getElementById('btn-timeline-new-task'),
+  btnTimelineFrequent:  document.getElementById('btn-timeline-frequent'),
+  tlFrequentPopover:    document.getElementById('timeline-frequent-popover'),
+  tlFrequentList:       document.getElementById('tl-frequent-list'),
+  tlFrequentInput:      document.getElementById('tl-frequent-input'),
+  btnTlFrequentAdd:     document.getElementById('btn-tl-frequent-add'),
   tlQuickAddBar:        document.getElementById('timeline-quick-add-bar'),
   tlTaskInput:          document.getElementById('tl-task-input'),
   tlTaskListSel:        document.getElementById('tl-task-list-sel'),
@@ -1162,7 +1323,7 @@ const el = {
   homeSearch:           document.getElementById('home-search'),
   homeSearchWrap:       document.getElementById('home-search-wrap'),
   // Task search (modal — searches tasks + completion history)
-  btnSearch:            document.getElementById('btn-search'),
+  sidebarTaskSearch:    document.getElementById('sidebar-task-search'),
   searchBackdrop:       document.getElementById('search-backdrop'),
   searchInput:          document.getElementById('search-input'),
   searchResults:        document.getElementById('search-results'),
@@ -1288,11 +1449,89 @@ function listenCustomPeriods() {
   unsubscribeCustomPeriods = userDocRef().onSnapshot(snap => {
     const data = snap.data() || {};
     customPeriods = (data.customPeriods || []).map(buildCustomPeriodObj);
+    frequentTasks = data.frequentTasks || [];
     populatePeriodSelect();
     // If the custom-periods modal is currently open, refresh its list
     const backdrop = document.getElementById('custom-periods-backdrop');
     if (backdrop && !backdrop.classList.contains('hidden')) renderCpmList();
+    renderFrequentList();
   });
+}
+
+async function addFrequentTask(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return;
+  const key = 'freq_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const snap = await userDocRef().get();
+  const existing = (snap.exists ? snap.data().frequentTasks : null) || [];
+  await userDocRef().set(
+    { frequentTasks: [...existing, { key, name: trimmed }] },
+    { merge: true }
+  );
+}
+
+async function deleteFrequentTask(key) {
+  const snap = await userDocRef().get();
+  const existing = (snap.exists ? snap.data().frequentTasks : null) || [];
+  await userDocRef().set(
+    { frequentTasks: existing.filter(t => t.key !== key) },
+    { merge: true }
+  );
+}
+
+function renderFrequentList() {
+  const listEl = document.getElementById('tl-frequent-list');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (!frequentTasks.length) {
+    listEl.innerHTML = '<li class="tl-frequent-empty">Nessun task salvato</li>';
+    return;
+  }
+  frequentTasks.forEach(t => {
+    const li = document.createElement('li');
+    li.className = 'tl-frequent-item';
+    li.innerHTML = `
+      <span class="tl-frequent-item-name">${escapeHtml(t.name)}</span>
+      <span class="tl-frequent-item-del" title="Rimuovi dai frequenti">✕</span>
+    `;
+    li.querySelector('.tl-frequent-item-name').addEventListener('click', () => addFrequentTaskAsTask(t.name));
+    li.querySelector('.tl-frequent-item-del').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteFrequentTask(t.key);
+    });
+    listEl.appendChild(li);
+  });
+}
+
+/** Sceglie la lista di destinazione per "+" e "task frequenti":
+ *  quella selezionata nella barra rapida se aperta, altrimenti la lista
+ *  preferita (⭐), altrimenti la prima disponibile. */
+function pickTimelineTargetList() {
+  if (el.tlTaskListSel && el.tlTaskListSel.value && el.tlQuickAddBar && !el.tlQuickAddBar.classList.contains('hidden')) {
+    return el.tlTaskListSel.value;
+  }
+  const starred = state.lists.find(l => l.starred);
+  return (starred && starred.id) || (state.lists[0] && state.lists[0].id) || null;
+}
+
+/** Crea subito un task con questo nome (usato dal dropdown "task frequenti"
+ *  e dall'opzione "Frequente" nella scheda dettaglio). */
+async function addFrequentTaskAsTask(name) {
+  const listId = pickTimelineTargetList();
+  if (!listId) { showToast('Crea prima una lista'); return; }
+  const p = getPeriod('oggi');
+  const snap = await tasksRef(listId).get();
+  await tasksRef(listId).add({
+    name, completed: false, notes: '', order: snap.size,
+    deadline: null,
+    plannedPeriod: 'oggi',
+    plannedPeriodUntil: p ? p.getEnd() : null,
+    overdue: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    milestones: [],
+  });
+  if (el.tlFrequentPopover) el.tlFrequentPopover.classList.add('hidden');
+  renderTimeline();
 }
 
 async function addCustomPeriod(data) {
@@ -1563,6 +1802,41 @@ async function logTaskCompletion(listId, task, newCompleted, explicitDateIso) {
     }
   } catch (e) {
     console.warn('logTaskCompletion failed', e);
+  }
+}
+
+/**
+ * Migrazione una tantum (best-effort, sicura da rieseguire): converte i
+ * vecchi task con plannedPeriod "ogni_giorno" — impostati in passato da
+ * "Quando voglio farlo" — al nuovo sistema di ricorrenza ("Si ripete →
+ * Ogni giorno"), che ora è l'UNICO punto da cui si può impostare una
+ * ricorrenza. Lo stato di completamento (completed / lastCompletedDate)
+ * non viene toccato: la logica di "fatto oggi" è identica nei due
+ * sistemi, quindi lo storico e lo stato attuale restano invariati —
+ * cambia solo dove il task "vive" nel modello dati.
+ */
+async function migrateLegacyDailyTasks() {
+  try {
+    const allTasks = await fetchAllTasks();
+    const targets = allTasks.filter(t => t.plannedPeriod === 'ogni_giorno' && !isRecurringTask(t));
+    if (targets.length === 0) return;
+
+    const rec = { type: 'daily', days: [] };
+    const periodKey = getRecurrencePeriodKey(rec) || 'oggi';
+    const period = getPeriod(periodKey);
+    const until = period ? period.getEnd() : null;
+
+    const batch = db.batch();
+    targets.forEach(t => {
+      batch.update(tasksRef(t.listId).doc(t.id), {
+        recurrence: rec,
+        plannedPeriod: periodKey,
+        plannedPeriodUntil: until,
+      });
+    });
+    await batch.commit();
+  } catch (e) {
+    console.warn('migrateLegacyDailyTasks failed', e);
   }
 }
 
@@ -1899,6 +2173,7 @@ function listenLists() {
 
     if (!el.loading.classList.contains('hidden')) {
       el.loading.classList.add('hidden');
+      migrateLegacyDailyTasks().catch(err => console.warn('migrazione ogni_giorno fallita', err));
       const starred = state.lists.find(l => l.starred);
       if (starred) openList(starred.id); else showTimeline();
     }
@@ -2774,6 +3049,119 @@ function openDetailPanel(taskId) {
   el.overlay.classList.remove('hidden');
   renderMilestones(task, listColorHex);
   renderRecurrenceUI(task);
+  openHabitSection(task);
+}
+
+/**
+ * Mostra/nasconde e popola la sezione "Abitudine" della scheda task
+ * (statistiche + mini calendario), visibile solo per task ricorrenti.
+ * Al primo apertura di un dato task, riparte sempre dal mese corrente.
+ */
+async function openHabitSection(task) {
+  if (!el.detailHabitSection) return;
+  if (!isRecurringTask(task)) {
+    el.detailHabitSection.classList.add('hidden');
+    return;
+  }
+  el.detailHabitSection.classList.remove('hidden');
+  const today = new Date();
+  habitPanelState.taskId = task.id;
+  habitPanelState.listId = state.activeListId;
+  habitPanelState.year   = today.getFullYear();
+  habitPanelState.month  = today.getMonth();
+  await refreshHabitEntries(task.id);
+  renderHabitStats(task);
+  renderHabitCalGrid();
+}
+
+/** Ricarica dal log storico tutte le entry di completamento per un task */
+async function refreshHabitEntries(taskId) {
+  try {
+    const snap = await completionsRef().where('taskId', '==', taskId).get();
+    habitPanelState.entries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (e) {
+    habitPanelState.entries = [];
+  }
+}
+
+/** Aggiorna i 3 contatori: giorni totali, streak corrente, % di successo */
+function renderHabitStats(task) {
+  if (!el.habitStatDays) return;
+  const entries = habitPanelState.entries;
+  const rec = task.recurrence;
+
+  el.habitStatDays.textContent   = entries.length;
+  el.habitStatStreak.textContent = computeHabitStreak(task, entries);
+
+  let pctText = '—';
+  const createdDate = (task.createdAt && typeof task.createdAt.toDate === 'function')
+    ? task.createdAt.toDate() : null;
+  if (createdDate) {
+    const from = new Date(createdDate); from.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const expected = countScheduledOccurrences(rec, from, today);
+    const done     = countCompletedPeriods(rec, entries);
+    if (expected > 0) pctText = `${Math.round(Math.min(done / expected, 1) * 100)}%`;
+  }
+  el.habitStatPct.textContent = pctText;
+}
+
+/** Disegna la griglia del mini-calendario per habitPanelState.year/month */
+function renderHabitCalGrid() {
+  if (!el.habitCalGrid) return;
+  const { year, month, entries } = habitPanelState;
+  const doneDates = new Set(entries.map(e => e.date));
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const todayIso = toIso(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  el.habitCalMonthLabel.textContent = `${IT_MONTHS[month]} ${year}`;
+
+  const firstDay = new Date(year, month, 1);
+  const firstDow = firstDay.getDay();
+  const offset   = firstDow === 0 ? 6 : firstDow - 1;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  el.habitCalGrid.innerHTML = '';
+  IT_DAYS_SHORT.forEach(d => {
+    const h = document.createElement('div');
+    h.className = 'habit-cal-dow';
+    h.textContent = d[0];
+    el.habitCalGrid.appendChild(h);
+  });
+  for (let i = 0; i < offset; i++) {
+    const blank = document.createElement('div');
+    blank.className = 'habit-cal-cell habit-cal-cell--blank';
+    el.habitCalGrid.appendChild(blank);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const iso = toIso(year, month + 1, day);
+    const isFuture = iso > todayIso;
+    const isDone   = doneDates.has(iso);
+    const cell = document.createElement('div');
+    cell.className = [
+      'habit-cal-cell',
+      isDone   ? 'habit-cal-cell--done'   : '',
+      isFuture ? 'habit-cal-cell--future' : '',
+      iso === todayIso ? 'habit-cal-cell--today' : '',
+    ].filter(Boolean).join(' ');
+    cell.textContent = day;
+    if (!isFuture) {
+      cell.title = isDone ? 'Fatto — tocca per togliere la spunta' : 'Tocca per segnare fatto';
+      cell.addEventListener('click', async () => {
+        const task = state.tasks.find(t => t.id === habitPanelState.taskId);
+        if (!task) return;
+        const newDone = await toggleHabitDay(task, iso, habitPanelState.listId);
+        if (newDone === null) return;
+        await refreshHabitEntries(task.id);
+        renderHabitStats(task);
+        renderHabitCalGrid();
+        if (iso === todayIso) {
+          el.btnComplete.textContent = newDone ? 'Segna incompleto' : 'Segna completo';
+        }
+      });
+    }
+    el.habitCalGrid.appendChild(cell);
+  }
 }
 
 function updateDeadlineStatus(isoStr) {
@@ -3026,8 +3414,13 @@ function bindEvents() {
     refreshCalendarAll().then(renderCalendar);
   });
 
-  // Task search modal
-  if (el.btnSearch) el.btnSearch.addEventListener('click', openSearch);
+  // Task search bar (sidebar) — apre la modale di ricerca completa al focus
+  if (el.sidebarTaskSearch) {
+    el.sidebarTaskSearch.addEventListener('focus', () => openSearch());
+    el.sidebarTaskSearch.addEventListener('keydown', e => {
+      if (e.key === 'Escape') el.sidebarTaskSearch.blur();
+    });
+  }
   if (el.btnSearchClose) el.btnSearchClose.addEventListener('click', closeSearch);
   if (el.searchBackdrop) el.searchBackdrop.addEventListener('click', e => {
     if (e.target === el.searchBackdrop) closeSearch();
@@ -3288,6 +3681,22 @@ function bindEvents() {
   if (recTypeEl) {
     recTypeEl.addEventListener('change', () => {
       const type = recTypeEl.value;
+
+      // "Frequente" non è una vera ricorrenza: salva solo il nome del task
+      // tra i task frequenti (richiamabili da 🔁 nell'Agenda) e riporta il
+      // select allo stato reale della ricorrenza del task.
+      if (type === 'frequent') {
+        const task = state.tasks.find(t => t.id === state.activeTaskId);
+        if (task && task.name && task.name.trim()) {
+          addFrequentTask(task.name);
+          showToast('Aggiunto ai task frequenti 🔁');
+        } else {
+          showToast('Dai un nome al task prima di salvarlo tra i frequenti');
+        }
+        if (task) renderRecurrenceUI(task);
+        return;
+      }
+
       _showDetailRecurrenceSub(type);
       if (type === 'daily') {
         // Default: all days selected = every day
@@ -3296,6 +3705,30 @@ function bindEvents() {
         document.querySelectorAll('#detail-recurrence-days .recurrence-day-btn').forEach(b => b.classList.remove('active'));
       }
       saveRecurrence();
+
+      // Mostra/nasconde subito la sezione Abitudine, senza aspettare la
+      // riapertura della scheda (copia locale della ricorrenza appena letta).
+      const task = state.tasks.find(t => t.id === state.activeTaskId);
+      if (task) {
+        task.recurrence = type ? _readDetailRecurrence() : null;
+        openHabitSection(task);
+      }
+    });
+  }
+
+  // Habit tracker — navigazione mese nel mini-calendario della scheda task
+  if (el.habitCalPrev) {
+    el.habitCalPrev.addEventListener('click', () => {
+      habitPanelState.month--;
+      if (habitPanelState.month < 0) { habitPanelState.month = 11; habitPanelState.year--; }
+      renderHabitCalGrid();
+    });
+  }
+  if (el.habitCalNext) {
+    el.habitCalNext.addEventListener('click', () => {
+      habitPanelState.month++;
+      if (habitPanelState.month > 11) { habitPanelState.month = 0; habitPanelState.year++; }
+      renderHabitCalGrid();
     });
   }
 
@@ -3360,11 +3793,11 @@ function bindEvents() {
       });
       // Populate period select, default to 'oggi'
       el.tlTaskPeriodSel.innerHTML = '';
-      const allPeriods = [DAILY_PERIOD, ...customPeriods, ...PERIODS];
+      const allPeriods = [...customPeriods, ...PERIODS];
       allPeriods.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.key;
-        opt.textContent = p.key === DAILY_PERIOD.key ? '↻ ' + p.label : (p.isCustom ? '◈ ' + p.label : p.label);
+        opt.textContent = p.isCustom ? '◈ ' + p.label : p.label;
         if (p.key === 'oggi') opt.selected = true;
         el.tlTaskPeriodSel.appendChild(opt);
       });
@@ -3406,6 +3839,54 @@ function bindEvents() {
 
   if (el.btnTlAdd) el.btnTlAdd.addEventListener('click', doTlAdd);
   if (el.tlTaskInput) el.tlTaskInput.addEventListener('keydown', e => { if (e.key === 'Enter') doTlAdd(); if (e.key === 'Escape') hideTlQuickAdd(); });
+
+  // ── Timeline "+" — nuovo task, apre subito la scheda completa ──
+  if (el.btnTimelineNewTask) {
+    el.btnTimelineNewTask.addEventListener('click', async () => {
+      const listId = pickTimelineTargetList();
+      if (!listId) { showToast('Crea prima una lista'); return; }
+      const p = getPeriod('oggi');
+      const snap = await tasksRef(listId).get();
+      const docRef = await tasksRef(listId).add({
+        name: '', completed: false, notes: '', order: snap.size,
+        deadline: null,
+        plannedPeriod: 'oggi',
+        plannedPeriodUntil: p ? p.getEnd() : null,
+        overdue: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        milestones: [],
+      });
+      openList(listId, docRef.id);
+    });
+  }
+
+  // ── Timeline "🔁" — task frequenti (dropdown) ──────────────────
+  if (el.btnTimelineFrequent && el.tlFrequentPopover) {
+    el.btnTimelineFrequent.addEventListener('click', e => {
+      e.stopPropagation();
+      el.tlFrequentPopover.classList.toggle('hidden');
+      if (!el.tlFrequentPopover.classList.contains('hidden')) renderFrequentList();
+    });
+    document.addEventListener('click', e => {
+      if (!el.tlFrequentPopover.classList.contains('hidden')
+          && !el.tlFrequentPopover.contains(e.target)
+          && e.target !== el.btnTimelineFrequent) {
+        el.tlFrequentPopover.classList.add('hidden');
+      }
+    });
+  }
+
+  if (el.btnTlFrequentAdd) {
+    el.btnTlFrequentAdd.addEventListener('click', () => {
+      addFrequentTask(el.tlFrequentInput.value);
+      el.tlFrequentInput.value = '';
+    });
+  }
+  if (el.tlFrequentInput) {
+    el.tlFrequentInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { addFrequentTask(el.tlFrequentInput.value); el.tlFrequentInput.value = ''; }
+    });
+  }
 
   // ── Milestones ───────────────────────────────────────────────
   if (el.btnAddMilestone) {
@@ -3845,11 +4326,22 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
   state.lists.forEach(l => { listNames[l.id] = l.name; });
 
   // Habit-tracker section — what got completed this day (works for past days too,
-  // since it reads from the permanent completion log rather than live task state)
-  const habitEntries = completionsForIso(iso);
+  // since it reads from the permanent completion log rather than live task state).
+  // I task ricorrenti non compaiono qui: hanno la loro sezione modificabile sotto.
+  const allHabitEntries = completionsForIso(iso);
+  const recurringTaskIds = new Set(calState.allTasks.filter(isRecurringTask).map(t => t.id));
+  const habitEntries = allHabitEntries.filter(e => !recurringTaskIds.has(e.taskId));
   if (habitEntries.length > 0) {
     const sec = buildHabitPanelSection(habitEntries, listNames);
     el.calDayPanelContent.appendChild(sec);
+  }
+
+  // Sezione "Abitudini" — spunta modificabile per i task ricorrenti, per
+  // oggi o per un qualsiasi giorno passato (mai per il futuro).
+  let hasHabitToggle = false;
+  if (iso <= todayIso) {
+    const sec = buildHabitToggleSection(iso, listNames);
+    if (sec) { el.calDayPanelContent.appendChild(sec); hasHabitToggle = true; }
   }
 
   // Scheduling info ("Scadenze" / "In programma") only makes sense for
@@ -3867,12 +4359,54 @@ function renderCalDayPanel(iso, periodTasks, dlTasks) {
     }
   }
 
-  const nothingToShow = habitEntries.length === 0 && (isPast || (dlTasks.length === 0 && periodOnly.length === 0));
+  const nothingToShow = habitEntries.length === 0 && !hasHabitToggle
+    && (isPast || (dlTasks.length === 0 && periodOnly.length === 0));
   if (nothingToShow) {
     el.calDayPanelContent.innerHTML = isPast
       ? '<p class="cal-panel-hint">Nessuna attività completata questo giorno.</p>'
       : '<p class="cal-panel-hint">Nessuna attività per questo giorno.</p>';
   }
+}
+
+/** Build the "🔁 Abitudini" section — spunta modificabile per i task
+ *  ricorrenti in questo giorno (oggi o passato). Toccando una riga si
+ *  aggiunge/rimuove il completamento per quel giorno specifico. */
+function buildHabitToggleSection(iso, listNames) {
+  const recurringTasks = calState.allTasks.filter(isRecurringTask);
+  if (recurringTasks.length === 0) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-panel-section';
+  wrap.innerHTML = `<div class="cal-panel-section-title">🔁 Abitudini</div>`;
+
+  const doneIds = new Set(completionsForIso(iso).map(e => e.taskId));
+
+  recurringTasks
+    .slice()
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .forEach(task => {
+      const done = doneIds.has(task.id);
+      const row = document.createElement('div');
+      row.className = 'cal-panel-row cal-habit-toggle-row' + (done ? ' completed' : '');
+      row.innerHTML = `
+        <span class="task-check ${done ? 'checked' : ''}"></span>
+        <div class="cal-panel-row-body">
+          <span class="cal-panel-row-name">${escapeHtml(task.name || '—')}</span>
+          <div class="cal-panel-row-meta">
+            <span class="tl-list-tag">${escapeHtml(listNames[task.listId] || '–')}</span>
+          </div>
+        </div>
+      `;
+      row.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await toggleHabitDay(task, iso, task.listId);
+        await refreshCalendarAll();
+        renderCalendar();
+      });
+      wrap.appendChild(row);
+    });
+
+  return wrap;
 }
 
 /** Build the "✅ Completati" section — reads from the completion log, not live task state */
@@ -4094,11 +4628,11 @@ function populatePeriodSelect() {
     const prevValue = sel.value; // preserve selection across refresh
     sel.innerHTML = '<option value="">— Periodo —</option>';
 
-    // "Ogni giorno" always first (no finite end, would sink to bottom otherwise)
-    const optDaily = document.createElement('option');
-    optDaily.value       = DAILY_PERIOD.key;
-    optDaily.textContent = '↻ ' + DAILY_PERIOD.label;
-    sel.appendChild(optDaily);
+    // NOTA: "Ogni giorno" NON è più selezionabile da qui — dal 2026 la
+    // ricorrenza si imposta solo dalla sezione "Ricorrenza → Si ripete"
+    // della scheda task, per evitare due sistemi paralleli e confusi.
+    // getPeriod('ogni_giorno') resta comunque valido come rete di
+    // sicurezza per eventuali task non ancora migrati.
 
     // Sort key for dropdown position:
     //   • Weekly custom periods → pinned at currentWeekEnd + 1 ms so they always
@@ -4203,6 +4737,7 @@ function init() {
         if (unsubscribeCustomPeriods) { unsubscribeCustomPeriods(); unsubscribeCustomPeriods = null; }
         if (state.unsubscribeTasks) { state.unsubscribeTasks(); state.unsubscribeTasks = null; }
         customPeriods = [];
+        frequentTasks = [];
         state.lists = []; state.tasks = [];
         renderSidebar(); showHomepage();
         if (el.btnLogin)    el.btnLogin.classList.remove('hidden');

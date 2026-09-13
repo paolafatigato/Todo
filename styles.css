@@ -163,6 +163,45 @@ body {
 
 #btn-new-list:hover { transform: rotate(90deg) scale(1.1); background: var(--pink); }
 
+/* ============================================================
+   SIDEBAR — barra di ricerca task (in cima all'indice)
+   ============================================================ */
+
+#sidebar-task-search-wrap {
+  position: relative;
+}
+
+#sidebar-task-search {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 20px;
+  color: rgba(255,255,255,0.9);
+  font-size: 0.85rem;
+  outline: none;
+  transition: background var(--t), border-color var(--t);
+}
+
+#sidebar-task-search::placeholder { color: rgba(255,255,255,0.45); }
+
+#sidebar-task-search:focus {
+  background: rgba(255,255,255,0.18);
+  border-color: rgba(255,240,136,0.4);
+  color: #fff;
+}
+
+#sidebar-task-search-wrap::before {
+  content: '🔍';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-42%);
+  font-size: 0.72rem;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 /* List navigation */
 #lists-nav {
   flex: 1;
@@ -237,7 +276,6 @@ body {
 #btn-home,
 #btn-timeline,
 #btn-calendar,
-#btn-search,
 #btn-manage-periods {
   width: 100%;
   padding: 10px 12px;
@@ -250,8 +288,7 @@ body {
 
 #btn-home:hover,
 #btn-timeline:hover,
-#btn-calendar:hover,
-#btn-search:hover { background: rgba(255,255,255,0.10); color: #fff; }
+#btn-calendar:hover { background: rgba(255,255,255,0.10); color: #fff; }
 
 /* "Periodi" — slightly distinct: yellow-tinted accent separates it
    from the three navigation buttons above */
@@ -1048,7 +1085,6 @@ body {
   #btn-home,
   #btn-timeline,
   #btn-calendar,
-  #btn-search,
   #btn-manage-periods {
     padding: 8px 10px;
     font-size: 0.85rem;
@@ -1249,7 +1285,6 @@ body {
   #btn-home,
   #btn-timeline,
   #btn-calendar,
-  #btn-search,
   #btn-manage-periods {
     width: auto;
     padding: 4px 8px;
@@ -1261,9 +1296,8 @@ body {
 
   .auth-controls { display: none !important; }
 
-  /* Hide list nav and search on mobile */
+  /* Hide list nav on mobile */
   #lists-nav { display: none; }
-  #sidebar-search-wrap { display: none !important; }
 
   /* Main area height */
   #main { height: 100vh;  }
@@ -1417,7 +1451,6 @@ body {
   body.mobile-menu-open #btn-home,
   body.mobile-menu-open #btn-timeline,
   body.mobile-menu-open #btn-calendar,
-  body.mobile-menu-open #btn-search,
   body.mobile-menu-open #btn-manage-periods {
     width: 100%;
     text-align: left;
@@ -3233,26 +3266,172 @@ body {
 }
 
 #btn-timeline-quick-add {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, var(--dark-red) 0%, var(--pink) 100%);
-  color: #fff;
-  border-radius: 20px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  padding: 0;
+  border-radius: 50%;
   border: none;
   transition: transform var(--t), box-shadow var(--t), opacity var(--t);
-  white-space: nowrap;
-  box-shadow: 0 2px 10px rgba(206,45,79,0.28);
+  box-shadow: 0 2px 10px rgba(255,152,169,0.4);
 }
 
 #btn-timeline-quick-add:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(206,45,79,0.38);
+  transform: rotate(90deg) scale(1.1);
+  box-shadow: 0 4px 16px rgba(255,152,169,0.55);
 }
 
 #btn-timeline-quick-add.active {
   opacity: 0.6;
+}
+
+/* ============================================================
+   TIMELINE — bottoni "+" e "task frequenti"
+   ============================================================ */
+
+#btn-timeline-new-task,
+#btn-timeline-frequent {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform var(--t), box-shadow var(--t), background var(--t);
+}
+
+/* "+" — palette invertita rispetto a "+ Nuova lista" (blu pieno, icona gialla) */
+#btn-timeline-new-task {
+  font-size: 1.3rem;
+  font-weight: 700;
+  background: var(--blue);
+  color: var(--yellow);
+}
+#btn-timeline-new-task:hover {
+  transform: rotate(90deg) scale(1.1);
+  background: var(--pink);
+}
+
+/* "task frequenti" — sfondo lilla pieno, icona blu a tinta unita */
+#btn-timeline-frequent {
+  background: var(--yellow);
+  box-shadow: 0 2px 10px rgba(178,133,236,0.35);
+}
+#btn-timeline-frequent:hover {
+  transform: rotate(90deg) scale(1.1);
+  box-shadow: 0 4px 16px rgba(178,133,236,0.5);
+}
+#btn-timeline-frequent svg,
+#btn-timeline-quick-add svg {
+  display: block;
+}
+
+.tl-frequent-wrap { position: relative; }
+
+#timeline-frequent-popover {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  width: 240px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  z-index: 50;
+  animation: slideIn 180ms ease both;
+}
+
+.tl-frequent-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+#tl-frequent-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tl-frequent-empty {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 2px;
+}
+
+.tl-frequent-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  transition: background var(--t);
+}
+.tl-frequent-item:hover { background: var(--bg); }
+
+.tl-frequent-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tl-frequent-item-del {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--t), background var(--t), color var(--t);
+}
+.tl-frequent-item:hover .tl-frequent-item-del { opacity: 1; }
+.tl-frequent-item-del:hover { background: var(--danger); color: #fff; }
+
+.tl-frequent-add-row {
+  display: flex;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+#tl-frequent-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+}
+
+#btn-tl-frequent-add {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Quick-add bar (below timeline header) */
@@ -3496,46 +3675,42 @@ body {
 #btn-add-milestone:hover { background: #2a3aa8; transform: scale(1.08); }
 
 /* ============================================================
-   SIDEBAR — search bar
+   HOMEPAGE ("Le mie liste") — search bar
    ============================================================ */
 
-#sidebar-search-wrap {
-  padding: 6px 10px 4px;
+#home-search-wrap {
+  padding: 0 0 20px;
   position: relative;
-  flex-shrink: 0;
 }
 
-#sidebar-search {
+#home-search {
   width: 100%;
-  padding: 7px 12px 7px 30px;
-  background: rgba(255,255,255,0.10);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 20px;
-  color: rgba(255,255,255,0.9);
-  font-size: 0.82rem;
+  padding: 10px 16px 10px 38px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
   outline: none;
-  transition: background var(--t), border-color var(--t);
+  font-size: 0.9rem;
+  background: var(--surface);
+  color: var(--text-primary);
+  transition: border-color var(--t), box-shadow var(--t);
 }
 
-#sidebar-search::placeholder {
-  color: rgba(255,255,255,0.4);
+#home-search:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(53,72,192,0.10);
 }
 
-#sidebar-search:focus {
-  background: rgba(255,255,255,0.18);
-  border-color: rgba(255,240,136,0.4);
-  color: #fff;
-}
+#home-search::placeholder { color: var(--text-muted); }
 
-#sidebar-search-wrap::before {
+#home-search-wrap::before {
   content: '🔍';
   position: absolute;
-  left: 19px;
+  left: 13px;
   top: 50%;
-  transform: translateY(-50%);
-  font-size: 0.7rem;
+  transform: translateY(-65%);
+  font-size: 0.82rem;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .nav-item-color-dot {
@@ -3568,6 +3743,126 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* ============================================================
+   HABIT TRACKER — statistiche + mini calendario (scheda task)
+   ============================================================ */
+
+.habit-stats-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.habit-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.habit-stat-value {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--blue);
+}
+
+.habit-stat-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.habit-cal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.habit-cal-header button {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  transition: background var(--t);
+}
+.habit-cal-header button:hover { background: var(--bg); }
+
+#habit-cal-month-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.habit-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-bottom: 6px;
+}
+
+.habit-cal-dow {
+  font-size: 0.62rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-weight: 600;
+  padding-bottom: 2px;
+}
+
+.habit-cal-cell {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  color: var(--text-primary);
+  background: var(--bg);
+  cursor: pointer;
+  transition: background var(--t), transform var(--t);
+}
+.habit-cal-cell:hover { transform: scale(1.08); }
+
+.habit-cal-cell--blank { visibility: hidden; cursor: default; }
+.habit-cal-cell--blank:hover { transform: none; }
+
+.habit-cal-cell--future { opacity: 0.35; cursor: not-allowed; }
+.habit-cal-cell--future:hover { transform: none; }
+
+.habit-cal-cell--done {
+  background: var(--c2, #5C946E);
+  color: #fff;
+  font-weight: 700;
+}
+
+.habit-cal-cell--today { box-shadow: inset 0 0 0 2px var(--blue); }
+
+.habit-cal-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* ── Toggle abitudini nel pannello giorno del calendario ── */
+.cal-habit-toggle-row { align-items: center; }
+.cal-habit-toggle-row .task-check { margin-top: 0; }
 
 /* ============================================================
    TASK MINI PROGRESS BAR (in task list + timeline)
@@ -3949,62 +4244,17 @@ body {
    ============================================================ */
 
 /* ============================================================
-   HOMEPAGE SEARCH BAR
-   ============================================================ */
-
-#home-search-wrap {
-  padding: 0 0 20px;
-  position: relative;
-}
-
-#home-search {
-  width: 100%;
-  padding: 10px 16px 10px 38px;
-  border: 2px solid var(--border);
-  border-radius: var(--radius);
-  outline: none;
-  font-size: 0.9rem;
-  background: var(--surface);
-  color: var(--text-primary);
-  transition: border-color var(--t), box-shadow var(--t);
-}
-
-#home-search:focus {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(53,72,192,0.10);
-}
-
-#home-search::placeholder { color: var(--text-muted); }
-
-#home-search-wrap::before {
-  content: '🔍';
-  position: absolute;
-  left: 13px;
-  top: 50%;
-  transform: translateY(-65%);
-  font-size: 0.82rem;
-  pointer-events: none;
-  opacity: 0.45;
-}
-
-/* On desktop the sidebar already has search — hide homepage search */
-@media (min-width: 701px) {
-  #home-search-wrap { display: none; }
-}
-
-/* ============================================================
-   URGENT BUTTON — blue base with red gradient hint
+   URGENT BUTTON — sfondo rosa pieno, icona SVG blu
    ============================================================ */
 
 #btn-timeline-quick-add {
-  background: linear-gradient(135deg, var(--blue) 40%, #CE2D4F 100%) !important;
-  box-shadow: 0 2px 10px rgba(53,72,192,0.35) !important;
-  color: #fff !important;
+  background: var(--pink) !important;
+  box-shadow: 0 2px 10px rgba(255,152,169,0.4) !important;
 }
 
 #btn-timeline-quick-add:hover {
-  box-shadow: 0 4px 16px rgba(53,72,192,0.5) !important;
-  transform: translateY(-1px) scale(1.05);
+  box-shadow: 0 4px 16px rgba(255,152,169,0.55) !important;
+  transform: rotate(90deg) scale(1.1);
 }
 
 /* ============================================================
