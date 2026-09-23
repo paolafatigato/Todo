@@ -69,6 +69,9 @@ let habitPanelState = { taskId: null, listId: null, entries: [], year: 0, month:
 /**
  * Convert a raw Firestore custom-period record into a live period object
  * compatible with the rest of the PERIODS API.
+ *   type 'weekly'                → finestra settimanale (es. "Weekend")
+ *   type 'once'                  → date fisse (es. "Viaggio a Roma")
+ *   type 'once' + repeatYearly   → stesse date ogni anno (es. "Estate prossima")
  */
 function buildCustomPeriodObj(p) {
   if (p.type === 'weekly') {
@@ -86,25 +89,159 @@ function buildCustomPeriodObj(p) {
       getStart: () => weeklyWindowStartMs(startDow, endDow),
     };
   }
-  return {
-    key:       p.key,
-    label:     p.name,
-    color:     p.color || '#6F8FE3',
-    isCustom:  true,
-    type:      'once',
-    endDate:   p.endDate   || null,
-    startDate: p.startDate || null,
-    getEnd: () => {
-      if (!p.endDate) return null;
-      const [y, m, d] = p.endDate.split('-').map(Number);
-      return endOfDay(new Date(y, m - 1, d));
-    },
-    getStart: () => {
-      if (!p.startDate) return null;
-      const [y, m, d] = p.startDate.split('-').map(Number);
-      return startOfDayMs(new Date(y, m - 1, d));
-    },
+  const obj = {
+    key:          p.key,
+    label:        p.name,
+    color:        p.color || '#6F8FE3',
+    isCustom:     true,
+    type:         'once',
+    repeatYearly: !!p.repeatYearly,
+    endDate:      p.endDate   || null,
+    startDate:    p.startDate || null,
   };
+  if (p.repeatYearly && p.endDate) {
+    // Periodo annuale: ogni volta si usa l'occorrenza "valida" (vedi yearlyOccurrence)
+    obj.getEnd   = () => { const o = yearlyOccurrence(p.startDate, p.endDate); return o ? o.end   : null; };
+    obj.getStart = () => { const o = yearlyOccurrence(p.startDate, p.endDate); return o ? o.start : null; };
+    return obj;
+  }
+  obj.getEnd = () => {
+    if (!p.endDate) return null;
+    const [y, m, d] = p.endDate.split('-').map(Number);
+    return endOfDay(new Date(y, m - 1, d));
+  };
+  obj.getStart = () => {
+    if (!p.startDate) return null;
+    const [y, m, d] = p.startDate.split('-').map(Number);
+    return startOfDayMs(new Date(y, m - 1, d));
+  };
+  return obj;
+}
+
+// ─── LOGICA COMUNE DEI PERIODI (ordinamento + scalata) ────────
+// Periodi standard verso cui un task può "scalare" quando la sua fine si avvicina.
+// "Prossimo mese" è escluso di proposito: un periodo personalizzato come
+// "Estate prossima" (1 lug–31 ago) resta tale anche il 1 luglio, e passa a
+// "Questo mese" solo quando finisce entro il mese corrente.
+const CASCADE_KEYS = ['oggi', 'domani', 'questa_settimana', 'prossima_settimana', 'questo_mese'];
+const PINNED_KEYS  = ['oggi', 'domani'];                      // sempre in cima
+const TAIL_KEYS    = ['prossimi_5_anni', 'prossima_vita'];    // sempre in fondo
+
+/**
+ * Chiave del periodo standard più breve che contiene `endMs`
+ * (quello che finisce per primo, ma non prima di endMs).
+ * Una fine già passata o di oggi → 'oggi'. Null se nessun periodo ammesso la contiene.
+ */
+function standardKeyForEnd(endMs, allowedKeys) {
+  if (endMs == null) return null;
+  if (endMs <= endOfDay(new Date())) return 'oggi';
+  let best = null, bestEnd = Infinity;
+  PERIODS.forEach(p => {
+    if (allowedKeys && !allowedKeys.includes(p.key)) return;
+    const e = p.getEnd();
+    if (e === null || e < endMs) return;
+    if (e < bestEnd) { best = p.key; bestEnd = e; } // a parità vince l'indice più basso
+  });
+  return best;
+}
+
+/** Periodo standard in cui un periodo personalizzato che finisce a endMs deve già scalare (o null). */
+function cascadeTargetForEnd(endMs) {
+  return standardKeyForEnd(endMs, CASCADE_KEYS);
+}
+
+/**
+ * Occorrenza "valida" di un periodo annuale: la prima (quest'anno o i successivi)
+ * che non è ancora finita e che non è già "scalata" in un periodo standard breve.
+ * Es. "Estate" 1 lug–31 ago:
+ *   13 mag / 1 lug → quest'anno   ·   2 ago / 30 ago → l'anno prossimo
+ */
+function yearlyOccurrence(startIso, endIso) {
+  const [, sm, sd] = (startIso || endIso).split('-').map(Number);
+  const [, em, ed] = endIso.split('-').map(Number);
+  const wraps = (em * 100 + ed) < (sm * 100 + sd); // es. 20 dic → 6 gen
+  const ref = new Date();
+  const now = ref.getTime();
+  for (let y = ref.getFullYear() - 1; y <= ref.getFullYear() + 2; y++) {
+    const start = startOfDayMs(new Date(y, sm - 1, sd));
+    const end   = endOfDay(new Date(wraps ? y + 1 : y, em - 1, ed));
+    if (end < now) continue;
+    if (cascadeTargetForEnd(end) !== null) continue;
+    return { start, end };
+  }
+  return null;
+}
+
+/**
+ * Posizione di ogni periodo, dal più vicino al più lontano:
+ *  • Oggi e Domani sempre per primi; Prossimi 5 anni e Prossima vita sempre per ultimi.
+ *  • Gli altri standard in ordine di fine (es. a fine mese "Questo mese" precede "Prossima settimana").
+ *  • Personalizzati non ancora iniziati → prima del primo periodo standard che inizia
+ *    insieme o dopo di loro (il 30 giu "Estate" 1 lug–31 ago viene prima di "Prossimo mese").
+ *  • Personalizzati già in corso → in base alla fine.
+ *  • Settimanali (es. weekend) → subito dopo "Questa settimana".
+ */
+let _periodRankCache = { stamp: null, src: null, map: null };
+
+function computePeriodRanks() {
+  const stamp = new Date().toDateString();
+  if (_periodRankCache.map && _periodRankCache.stamp === stamp && _periodRankCache.src === customPeriods) {
+    return _periodRankCache.map;
+  }
+  const byKey  = k => PERIODS.find(p => p.key === k);
+  const middle = PERIODS
+    .filter(p => !PINNED_KEYS.includes(p.key) && !TAIL_KEYS.includes(p.key))
+    .map((p, i) => ({ p, i, end: p.getEnd() }))
+    .sort((a, b) => (a.end - b.end) || (a.i - b.i))
+    .map(x => x.p);
+  const ordered = [...PINNED_KEYS.map(byKey), ...middle, ...TAIL_KEYS.map(byKey)].filter(Boolean);
+
+  const map = new Map();
+  ordered.forEach((p, i) => map.set(p.key, i * 10));
+  const tailRank = map.has(TAIL_KEYS[0]) ? map.get(TAIL_KEYS[0]) : ordered.length * 10;
+  const now = Date.now();
+
+  const placed = customPeriods.map(cp => {
+    let base, anchor;
+    if (cp.type === 'weekly') {
+      base   = (map.get('questa_settimana') ?? tailRank) + 6; // subito dopo "Questa settimana"
+      anchor = cp.getEnd() || 0;
+    } else {
+      const start = cp.getStart ? cp.getStart() : null;
+      const end   = cp.getEnd   ? cp.getEnd()   : null;
+      let target;
+      if (start !== null && start > now) {
+        target = middle.find(p => { const s = p.getStart(); return s !== null && s >= start; });
+        anchor = start;
+      } else {
+        target = end !== null ? middle.find(p => p.getEnd() > end) : null;
+        anchor = end !== null ? end : Infinity;
+      }
+      base = target ? map.get(target.key) : tailRank;
+    }
+    return { cp, base, anchor };
+  }).sort((a, b) => (a.base - b.base) || (a.anchor - b.anchor));
+
+  let lastBase = null, n = 0;
+  placed.forEach(({ cp, base }) => {
+    n = base === lastBase ? n + 1 : 0;
+    lastBase = base;
+    map.set(cp.key, base - 5 + n * 0.01);
+  });
+
+  _periodRankCache = { stamp, src: customPeriods, map };
+  return map;
+}
+
+function periodRank(key) {
+  if (key === 'ogni_giorno') key = 'oggi';
+  const r = computePeriodRanks().get(key);
+  return r === undefined ? 99990 : r;
+}
+
+/** Tutti i periodi (standard + personalizzati) nell'ordine corretto. */
+function orderedPeriods() {
+  return [...PERIODS, ...customPeriods].sort((a, b) => periodRank(a.key) - periodRank(b.key));
 }
 
 // ─── RECURRING TASK HELPERS ───────────────────────────────────
@@ -321,15 +458,15 @@ function getNextOccurrenceDate(rec, fromDate) {
   return null;
 }
 
-/** Map "N days until next occurrence" to the matching PERIODS key. */
+/**
+ * Map "N days until next occurrence" to the matching PERIODS key.
+ * Basato sul calendario (non sul numero di giorni): una data di martedì prossimo
+ * è "Prossima settimana" anche se mancano solo 5 giorni.
+ */
 function periodKeyForDaysAhead(diffDays) {
   if (diffDays <= 0) return 'oggi';
-  if (diffDays === 1) return 'domani';
-  if (diffDays <= 7) return 'questa_settimana';
-  if (diffDays <= 14) return 'prossima_settimana';
-  if (diffDays <= 31) return 'questo_mese';
-  if (diffDays <= 60) return 'prossimo_mese';
-  return 'prossimi_5_anni';
+  const target = endOfDay(addDays(new Date(), diffDays));
+  return standardKeyForEnd(target, [...CASCADE_KEYS, 'prossimo_mese']) || 'prossimi_5_anni';
 }
 
 /**
@@ -657,23 +794,22 @@ const getPeriod = key => {
 };
 
 const nextPeriodKey = key => {
-  const idx = PERIODS.findIndex(p => p.key === key);
-  if (idx < 0 || idx >= PERIODS.length - 1) return null;
-  // Skip periods whose end is the same as (or earlier than) the current period's end.
-  // This ensures that e.g. on Sunday, postponing 'questa_settimana' returns 'domani'
-  // rather than 'prossima_settimana' (both share the same week-end boundary that day).
-  const currentEnd = PERIODS[idx].getEnd ? PERIODS[idx].getEnd() : null;
-  for (let i = idx + 1; i < PERIODS.length; i++) {
-    const nextEnd = PERIODS[i].getEnd ? PERIODS[i].getEnd() : null;
-    if (nextEnd === null || currentEnd === null || nextEnd > currentEnd) {
-      return PERIODS[i].key;
-    }
+  // "Rimanda" (»): il periodo standard successivo nell'ordine attuale che finisce DOPO quello corrente.
+  const cur = PERIODS.find(p => p.key === key);
+  if (!cur) return null;
+  const curEnd = cur.getEnd();
+  if (curEnd === null) return null;
+  const ordered = PERIODS.slice().sort((a, b) => periodRank(a.key) - periodRank(b.key));
+  const idx = ordered.findIndex(p => p.key === key);
+  for (let i = idx + 1; i < ordered.length; i++) {
+    const e = ordered[i].getEnd();
+    if (e === null || e > curEnd) return ordered[i].key;
   }
   return null;
 };
 
 /**
- * Effective period key for display/sorting: takes the MORE URGENT (lower index)
+ * Effective period key for display/sorting: takes the MORE URGENT
  * of the declared plannedPeriod and the period implied by the task's deadline.
  * This ensures a task with deadline "19 marzo" shows up in "questa settimana"
  * even if its plannedPeriod is "prossimo mese" or blank.
@@ -694,62 +830,24 @@ function effectivePeriodKey(task) {
   if (!declared) return deadlineKey;
   if (!deadlineKey) return declared;
 
-  // Both exist: pick the more urgent (lower PERIODS index)
-  const di = PERIODS.findIndex(p => p.key === declared);
-  const ki = PERIODS.findIndex(p => p.key === deadlineKey);
-  // If declared is a custom period (di < 0), always respect it — the user explicitly
-  // assigned it. The deadline badge still shows urgency on the task row.
-  if (di < 0) return declared;
-  if (ki < 0) return declared;
-  return ki < di ? deadlineKey : declared;
+  const dp = getPeriod(declared);
+  // Periodo personalizzato: lo rispettiamo sempre (il badge della scadenza mostra l'urgenza).
+  if (!dp || dp.isCustom) return declared;
+  const declaredEnd = dp.getEnd();
+  const deadlineEnd = getPeriod(deadlineKey)?.getEnd() ?? null;
+  if (deadlineEnd === null) return declared;
+  return (declaredEnd === null || deadlineEnd < declaredEnd) ? deadlineKey : declared;
 }
 
 /**
- * Numeric sort key for a task's planned period.
- * No period → sorted to the very end (9999).
- * Custom periods → sorted after standard periods, by proximity of end date.
+ * Numeric sort key for a task's planned period (dal più vicino al più lontano,
+ * vedi computePeriodRanks). No period → sorted to the very end.
  */
 function periodSortKey(task) {
-  if (task.plannedPeriod === 'ogni_giorno') return 0; // appears with 'oggi'
+  if (task.plannedPeriod === 'ogni_giorno') return periodRank('oggi'); // appears with 'oggi'
   const key = effectivePeriodKey(task);
-  if (!key) return 9999;
-  const idx = PERIODS.findIndex(p => p.key === key);
-  if (idx >= 0) return idx;
-
-  // Custom (user-defined) period: insert chronologically among standard periods.
-  // Works for both 'weekly' (dynamic getEnd) and 'once' (fixed date) types.
-  const cp = customPeriods.find(p => p.key === key);
-  // Prefer startDate for positioning 'once' custom periods when available.
-  let cpKeyMs = null;
-  if (cp) {
-    if (cp.type === 'weekly') {
-      // weekly custom: use the window end so it appears after 'questa_settimana'
-      cpKeyMs = cp.getEnd ? cp.getEnd() : null;
-    } else {
-      // once-type: prefer startDate if set, otherwise fall back to end
-      if (cp.startDate) cpKeyMs = new Date(cp.startDate + 'T00:00:00').getTime();
-      else cpKeyMs = cp.getEnd ? cp.getEnd() : null;
-    }
-  }
-
-  if (!cpKeyMs) {
-    // No end → just before prossima_vita
-    const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
-    return vitaIdx >= 0 ? vitaIdx - 0.5 : PERIODS.length - 0.5;
-  }
-
-  // Walk standard periods in order; place before the first whose end > cpKeyMs.
-  // Use strict < so equal-end cases (weekly windows ending same day) place the
-  // custom period AFTER the standard period (by returning index - 0.5 for the
-  // following slot).
-  for (let i = 0; i < PERIODS.length; i++) {
-    const stdEnd = PERIODS[i].getEnd();
-    if (stdEnd === null) return i - 0.5;   // hit prossima_vita → insert before it
-    if (cpKeyMs < stdEnd) return Math.max(0.5, i - 0.5);
-  }
-
-  const vitaIdx = PERIODS.findIndex(p => p.getEnd() === null);
-  return vitaIdx >= 0 ? vitaIdx - 0.5 : PERIODS.length - 0.5;
+  if (!key) return 99999;
+  return periodRank(key);
 }
 
 /**
@@ -1106,87 +1204,61 @@ async function autoAdvanceOverdueTasks(listId, tasksArray, skipRender = false) {
     // Skip completed tasks and daily legacy tasks.
     if (!task.plannedPeriod || task.plannedPeriod === 'ogni_giorno' || task.completed) return;
 
-    const currentIdx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
-    const isInCustomPeriod = currentIdx < 0 && customPeriods.some(p => p.key === task.plannedPeriod);
+    const current = getPeriod(task.plannedPeriod);
+    if (!current) return; // periodo eliminato o sconosciuto
 
-    // ── Custom period cascade: move to a standard period when close to end date ──
-    if (isInCustomPeriod) {
-      const cp = customPeriods.find(p => p.key === task.plannedPeriod);
-
-      // Weekly custom periods (e.g. "questo weekend") NEVER cascade to standard
-      // periods — they recur every week. Only update plannedPeriodUntil to keep it
-      // rolling (the window shifts each week).
-      if (cp && cp.type === 'weekly') {
-        const correctEnd = cp.getEnd ? cp.getEnd() : null;
-        if (correctEnd !== null && task.plannedPeriodUntil !== correctEnd) {
-          const update = { plannedPeriodUntil: correctEnd, overdue: false };
-          batch.update(tasksRef(listId).doc(task.id), update);
-          Object.assign(task, update);
-          hasChanges = true;
-        }
-        return;
+    // Weekly custom periods (e.g. "questo weekend") NEVER cascade to standard
+    // periods — they recur every week. Only update plannedPeriodUntil to keep it
+    // rolling (the window shifts each week).
+    if (current.isCustom && current.type === 'weekly') {
+      const correctEnd = current.getEnd ? current.getEnd() : null;
+      if (correctEnd !== null && task.plannedPeriodUntil !== correctEnd) {
+        const update = { plannedPeriodUntil: correctEnd, overdue: false };
+        batch.update(tasksRef(listId).doc(task.id), update);
+        Object.assign(task, update);
+        hasChanges = true;
       }
-
-      if (!task.plannedPeriodUntil) return;
-      const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
-      let targetPeriod = null;
-      if      (daysLeft < 1)  targetPeriod = PERIODS.find(p => p.key === 'oggi');
-      else if (daysLeft < 2)  targetPeriod = PERIODS.find(p => p.key === 'domani');
-      else if (daysLeft < 7)  targetPeriod = PERIODS.find(p => p.key === 'questa_settimana');
-      else if (daysLeft < 30) targetPeriod = PERIODS.find(p => p.key === 'questo_mese');
-      if (!targetPeriod) return;
-      const update = {
-        plannedPeriod:      targetPeriod.key,
-        plannedPeriodUntil: targetPeriod.getEnd(),
-        overdue:            true,
-      };
-      batch.update(tasksRef(listId).doc(task.id), update);
-      Object.assign(task, update);
-      hasChanges = true;
       return;
     }
 
-    if (currentIdx <= 0) return; // already at 'oggi' or unknown period
-
-    let targetPeriod = null;
-
-    // 1) Period-expiry based advance (existing logic, requires plannedPeriodUntil)
-    // Days are 00:01–23:59. A period advances when today >= the period's end day:
-    //   daysLeft < 1 → same day as end (or past) → oggi
-    //   daysLeft < 2 → tomorrow is the last day   → domani
-    //   daysLeft < 7 → within the current week     → questa_settimana
-    if (task.plannedPeriodUntil) {
-      const daysLeft = (task.plannedPeriodUntil - now) / 86400000;
-      if      (daysLeft < 1  && currentIdx > 0) targetPeriod = PERIODS[0]; // oggi
-      else if (daysLeft < 2  && currentIdx > 1) targetPeriod = PERIODS[1]; // domani
-      else if (daysLeft < 7  && currentIdx > 2) targetPeriod = PERIODS[2]; // questa_settimana
-    }
-
-    // 2) Deadline-based advance: if deadline is approaching sooner than the
-    //    current period, pull the task into the matching closer period.
+    // "Fine reale" del task = entro quando va fatto. Resta FISSA anche quando il
+    // task scala verso periodi più brevi (prima veniva sostituita dalla fine del
+    // nuovo periodo: un task di "questo mese" passato a "questa settimana"
+    // finiva per scadere la domenica prima della fine del mese).
+    let realEnd = task.plannedPeriodUntil || null;
     if (task.deadline) {
       const [dy, dm, dd] = task.deadline.split('-').map(Number);
-      const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const deadlineDay = new Date(dy, dm - 1, dd);
-      const diffDays = Math.round((deadlineDay - todayMid) / 86400000);
-      const deadlinePeriodKey = periodKeyForDaysAhead(diffDays);
-      const deadlineIdx = PERIODS.findIndex(p => p.key === deadlinePeriodKey);
-      if (deadlineIdx >= 0 && deadlineIdx < currentIdx) {
-        const currentTargetIdx = targetPeriod
-          ? PERIODS.findIndex(p => p.key === targetPeriod.key)
-          : currentIdx;
-        if (deadlineIdx < currentTargetIdx) {
-          targetPeriod = PERIODS[deadlineIdx];
-        }
+      const dlEnd = endOfDay(new Date(dy, dm - 1, dd));
+      if (realEnd === null || dlEnd < realEnd) realEnd = dlEnd;
+    }
+    if (realEnd === null) return; // es. "Prossima vita" senza scadenza
+
+    const isLate = realEnd < now;
+
+    // Periodo standard più breve che contiene la fine reale.
+    // I periodi personalizzati scalano al massimo fino a "questo mese".
+    const targetKey = standardKeyForEnd(realEnd, current.isCustom ? CASCADE_KEYS : null);
+
+    const moves = targetKey && targetKey !== task.plannedPeriod &&
+      (current.isCustom || periodRank(targetKey) < periodRank(task.plannedPeriod)); // mai all'indietro
+
+    if (!moves) {
+      // Già nel periodo giusto: segnala solo se è in ritardo
+      if (isLate && !task.overdue) {
+        const update = { overdue: true, overdueFrom: task.plannedPeriod };
+        batch.update(tasksRef(listId).doc(task.id), update);
+        Object.assign(task, update);
+        hasChanges = true;
       }
+      return;
     }
 
-    if (!targetPeriod) return;
-
     const update = {
-      plannedPeriod:      targetPeriod.key,
-      plannedPeriodUntil: targetPeriod.getEnd(),
-      overdue: true,
+      plannedPeriod:      targetKey,
+      plannedPeriodUntil: realEnd,
+      // "overdue" = davvero in ritardo, non semplicemente "scalato" a un periodo più vicino
+      overdue:            isLate || !!task.overdue,
+      overdueFrom:        (isLate || task.overdue) ? (task.overdueFrom || task.plannedPeriod) : null,
     };
     batch.update(tasksRef(listId).doc(task.id), update);
     Object.assign(task, update);
@@ -1542,7 +1614,7 @@ async function addCustomPeriod(data) {
   const existing = (snap.exists ? snap.data().customPeriods : null) || [];
   const record = data.type === 'weekly'
     ? { key, name: data.name.trim(), type: 'weekly', startDow: data.startDow, endDow: data.endDow, color: data.color }
-    : { key, name: data.name.trim(), type: 'once', startDate: data.startDate || null, endDate: data.endDate, color: data.color };
+    : { key, name: data.name.trim(), type: 'once', startDate: data.startDate || null, endDate: data.endDate, repeatYearly: !!data.repeatYearly, color: data.color };
   await userDocRef().set(
     { customPeriods: [...existing, record] },
     { merge: true }
@@ -1577,6 +1649,8 @@ function openCustomPeriodsModal() {
   if (nameEl)  nameEl.value  = '';
   if (startEl) startEl.value = '';
   if (endEl)   endEl.value   = '';
+  const yearlyEl = document.getElementById('cpm-yearly');
+  if (yearlyEl) yearlyEl.checked = false;
   // Reset to 'once' type
   const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
   if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
@@ -1641,6 +1715,9 @@ function renderCpmList() {
     let periodInfo;
     if (p.type === 'weekly') {
       periodInfo = `ogni settimana: ${DOW_NAMES_IT[p.startDow]} → ${DOW_NAMES_IT[p.endDow]}`;
+    } else if (p.repeatYearly) {
+      const dm = iso => { const [, m, d] = iso.split('-').map(Number); return `${d} ${MONTHS_IT_SHORT[m - 1]}`; };
+      periodInfo = `ogni anno: ${p.startDate ? dm(p.startDate) : '—'} → ${dm(p.endDate)}`;
     } else {
       const startFmt = p.startDate ? formatDeadline(p.startDate) : '—';
       const endFmt   = p.endDate   ? formatDeadline(p.endDate)   : '—';
@@ -1719,6 +1796,8 @@ function startEditCustomPeriod(p) {
     if (radio) { radio.checked = true; toggleCpmTypeSection('once'); }
     if (startEl) startEl.value = p.startDate || '';
     if (endEl)   endEl.value   = p.endDate   || '';
+    const yearlyEl = document.getElementById('cpm-yearly');
+    if (yearlyEl) yearlyEl.checked = !!p.repeatYearly;
   }
 
   renderCpmColorSwatches();
@@ -1736,7 +1815,7 @@ async function updateCustomPeriod(key, data) {
   const old     = existing[idx];
   const updated = data.type === 'weekly'
     ? { ...old, name: data.name, type: 'weekly', startDow: data.startDow, endDow: data.endDow, color: data.color }
-    : { ...old, name: data.name, type: 'once', startDate: data.startDate || null, endDate: data.endDate, color: data.color };
+    : { ...old, name: data.name, type: 'once', startDate: data.startDate || null, endDate: data.endDate, repeatYearly: !!data.repeatYearly, color: data.color };
   existing[idx] = updated;
   await userDocRef().set({ customPeriods: existing }, { merge: true });
 }
@@ -3021,14 +3100,15 @@ function openDetailPanel(taskId) {
   el.btnComplete.textContent = task.completed ? 'Segna incompleto' : 'Segna completo';
   el.detailDeadline.value = task.deadline || '';
   updateDeadlineStatus(task.deadline);
+  populatePeriodSelect(task.plannedPeriod); // ordine sempre aggiornato alla data di oggi
   el.detailPeriod.value = task.plannedPeriod || '';
 
   if (task.overdue && !task.completed) {
     el.detailOverdueBar.classList.remove('hidden');
-    const idx = PERIODS.findIndex(p => p.key === task.plannedPeriod);
-    const prevLabel = idx > 0 ? PERIODS[idx - 1].label : '…';
-    el.detailOverdueBar.textContent =
-      `⚠ Non completato in tempo! Spostato da "${prevLabel}". Modifica il periodo per azzerare l'avviso.`;
+    const fromPeriod = task.overdueFrom && task.overdueFrom !== task.plannedPeriod ? getPeriod(task.overdueFrom) : null;
+    el.detailOverdueBar.textContent = fromPeriod
+      ? `⚠ Non completato in tempo! Era in "${fromPeriod.label}". Modifica il periodo per azzerare l'avviso.`
+      : `⚠ Non completato in tempo! Modifica il periodo per azzerare l'avviso.`;
   } else {
     el.detailOverdueBar.classList.add('hidden');
   }
@@ -3792,15 +3872,8 @@ function bindEvents() {
         el.tlTaskListSel.appendChild(opt);
       });
       // Populate period select, default to 'oggi'
-      el.tlTaskPeriodSel.innerHTML = '';
-      const allPeriods = [...customPeriods, ...PERIODS];
-      allPeriods.forEach(p => {
-        const opt = document.createElement('option');
-        opt.value = p.key;
-        opt.textContent = p.isCustom ? '◈ ' + p.label : p.label;
-        if (p.key === 'oggi') opt.selected = true;
-        el.tlTaskPeriodSel.appendChild(opt);
-      });
+      populatePeriodSelect();
+      el.tlTaskPeriodSel.value = 'oggi';
       el.tlQuickAddBar.classList.remove('hidden');
       el.btnTimelineQuickAdd.classList.add('active');
       setTimeout(() => el.tlTaskInput.focus(), 50);
@@ -4007,8 +4080,14 @@ function bindEvents() {
           alert('La data di inizio deve essere precedente alla data di fine.');
           return;
         }
-        data.startDate = startDate || null;
-        data.endDate   = endDate;
+        const repeatYearly = !!document.getElementById('cpm-yearly')?.checked;
+        if (repeatYearly && !startDate) {
+          alert('Per un periodo che si ripete ogni anno servono sia la data di inizio sia quella di fine.');
+          return;
+        }
+        data.startDate    = startDate || null;
+        data.endDate      = endDate;
+        data.repeatYearly = repeatYearly;
       }
 
       btnCpmAdd.disabled = true;
@@ -4024,6 +4103,7 @@ function bindEvents() {
       document.getElementById('cpm-name').value = '';
       if (document.getElementById('cpm-start')) document.getElementById('cpm-start').value = '';
       if (document.getElementById('cpm-end'))   document.getElementById('cpm-end').value   = '';
+      if (document.getElementById('cpm-yearly')) document.getElementById('cpm-yearly').checked = false;
       const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
       if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
       cpmSelectedColor = '#6F8FE3';
@@ -4044,6 +4124,7 @@ function bindEvents() {
       document.getElementById('cpm-name').value = '';
       if (document.getElementById('cpm-start')) document.getElementById('cpm-start').value = '';
       if (document.getElementById('cpm-end'))   document.getElementById('cpm-end').value   = '';
+      if (document.getElementById('cpm-yearly')) document.getElementById('cpm-yearly').checked = false;
       const onceRadio = document.querySelector('input[name="cpm-type"][value="once"]');
       if (onceRadio) { onceRadio.checked = true; toggleCpmTypeSection('once'); }
       cpmSelectedColor = '#6F8FE3';
@@ -4622,55 +4703,34 @@ function escapeHtml(str) {
 // INIT
 // ============================================================
 
-function populatePeriodSelect() {
+function populatePeriodSelect(keepKey) {
   const selects = [el.detailPeriod, el.taskPeriodQuick, el.tlTaskPeriodSel].filter(Boolean);
+  const now = Date.now();
+  // Ordine unico per tutta l'app: dal più vicino al più lontano (vedi computePeriodRanks).
+  // NOTA: "Ogni giorno" NON è selezionabile da qui — la ricorrenza si imposta dalla
+  // sezione "Ricorrenza → Si ripete" della scheda task.
+  const all = orderedPeriods();
   selects.forEach(sel => {
     const prevValue = sel.value; // preserve selection across refresh
     sel.innerHTML = '<option value="">— Periodo —</option>';
-
-    // NOTA: "Ogni giorno" NON è più selezionabile da qui — dal 2026 la
-    // ricorrenza si imposta solo dalla sezione "Ricorrenza → Si ripete"
-    // della scheda task, per evitare due sistemi paralleli e confusi.
-    // getPeriod('ogni_giorno') resta comunque valido come rete di
-    // sicurezza per eventuali task non ancora migrati.
-
-    // Sort key for dropdown position:
-    //   • Weekly custom periods → pinned at currentWeekEnd + 1 ms so they always
-    //     appear immediately after "Questa settimana" regardless of the day of week.
-    //     (Using getEnd() directly would place them after "Prossima settimana" on
-    //      Mon–Thu because their next occurrence ends on the same Sunday.)
-    //   • All other periods (standard or once-custom) → their actual getEnd() value.
-    //   • Periods with getEnd() === null → sink to the very bottom.
-    const currentWeekEnd = endOfWeek(new Date());
-    const dropdownSortKey = p => {
-  if (p.isCustom && p.type === 'weekly') return currentWeekEnd + 1;
-  return p.getEnd ? p.getEnd() : null;
-};
-
-    // Merge standard + custom and sort by the key above
-    const all = [
-      ...PERIODS.map(p => ({ p, isCustom: false })),
-      ...customPeriods.map(p => ({ p, isCustom: true })),
-    ].sort((a, b) => {
-      const ka = dropdownSortKey(a.p);
-      const kb = dropdownSortKey(b.p);
-      if (ka === null && kb === null) return 0;
-      if (ka === null) return 1;
-      if (kb === null) return -1;
-      return ka - kb;
-    });
-
-    all.forEach(({ p, isCustom }) => {
+    all.forEach(p => {
+      // Periodi personalizzati a date fisse già finiti: nascosti, a meno che siano in uso
+      const expired = p.isCustom && p.type === 'once' && !p.repeatYearly &&
+                      p.getEnd() !== null && p.getEnd() < now;
+      if (expired && p.key !== prevValue && p.key !== keepKey) return;
       const opt = document.createElement('option');
       opt.value = p.key;
-      opt.textContent = isCustom ? '◈ ' + p.label : p.label;
+      opt.textContent = p.isCustom ? '◈ ' + p.label : p.label;
       sel.appendChild(opt);
     });
-
-    // Restore previous selection if it still exists
     if (prevValue) sel.value = prevValue;
   });
 }
+
+// Se l'app resta aperta (PWA) a cavallo della mezzanotte, riordina le tendine al rientro
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') populatePeriodSelect();
+});
 
 // ============================================================
 // FEEDBACK ERRORI DI SALVATAGGIO

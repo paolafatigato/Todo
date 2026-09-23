@@ -4841,4 +4841,5 @@ body {
   opacity: 1;
   transform: translate(-50%, 0);
   pointer-events: auto;
-}
+}.cpm-yearly-option { margin-top: 8px; }
+.cpm-yearly-option input[type="checkbox"] { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; }

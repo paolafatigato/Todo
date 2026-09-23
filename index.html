@@ -540,10 +540,11 @@
         </div>
 
         <p class="cpm-hint">
-          Crea periodi personalizzati (es. "Anno scolastico", "Quest'estate").
+          Crea periodi personalizzati (es. "Anno scolastico", "Estate prossima").
           I task assegnati scalano automaticamente verso periodi più brevi
           man mano che la data di fine si avvicina:
-          <strong>1 mese prima → questo mese · 1 settimana → questa settimana · domani → domani · oggi → oggi</strong>.
+          <strong>finisce entro il mese → questo mese · entro la settimana → questa settimana · domani → domani · oggi → oggi</strong>.
+          Se il periodo si ripete ogni anno, i nuovi task finiscono nell'edizione successiva quando quella attuale sta per chiudersi.
         </p>
 
         <div id="cpm-list"></div>
@@ -572,6 +573,9 @@
                 <input id="cpm-end" type="date" />
               </div>
             </div>
+            <label class="cpm-type-option cpm-yearly-option">
+              <input type="checkbox" id="cpm-yearly" /> Si ripete ogni anno (stesse date)
+            </label>
           </div>
 
           <div id="cpm-weekly-section" class="hidden">
