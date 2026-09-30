@@ -1,8 +1,8 @@
 {
   "name": "Todo List",
   "short_name": "Todo",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#3548C0",
   "theme_color": "#3548C0",
