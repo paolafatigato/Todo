@@ -1337,6 +1337,7 @@ const el = {
   taskList:             document.getElementById('task-list'),
   detailPanel:          document.getElementById('detail-panel'),
   detailTitle:          document.getElementById('detail-task-title'),
+  detailList:           document.getElementById('detail-list'),
   detailNotes:          document.getElementById('detail-notes'),
   btnCloseDetail:       document.getElementById('btn-close-detail'),
   btnSaveDetail:        document.getElementById('btn-save-detail'),
@@ -1989,6 +1990,51 @@ async function updateTaskInList(listId, taskId, data, taskObj) {
 async function deleteTask(taskId) {
   await tasksRef(state.activeListId).doc(taskId).delete();
   deleteCompletionLogForTask(taskId);
+}
+
+/** Sposta un task in un'altra lista: lo ricrea con lo stesso id nella lista
+ *  di destinazione (così il log dei completamenti resta valido) e lo elimina
+ *  da quella attuale, in un'unica scrittura atomica. */
+async function moveTaskToList(taskId, newListId) {
+  const oldListId = state.activeListId;
+  if (!newListId || newListId === oldListId) return;
+  const task = state.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  // Usa i valori correnti della scheda: titolo/note potrebbero non essere ancora salvati
+  clearTimeout(notesTimer);
+  const { id, ...data } = task;
+  const name = el.detailTitle.value.trim();
+  if (name) data.name = name;
+  data.notes = el.detailNotes.value;
+  if (!data.createdAt) data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+
+  const snap = await tasksRef(newListId).get();
+  data.order = snap.size;
+
+  const batch = db.batch();
+  batch.set(tasksRef(newListId).doc(taskId), data);
+  batch.delete(tasksRef(oldListId).doc(taskId));
+  await batch.commit();
+
+  updateCompletionLogList(taskId, newListId);
+  const newList = state.lists.find(l => l.id === newListId);
+  showToast(`Spostato in "${newList ? newList.name : 'lista'}"`);
+  openList(newListId, taskId);
+}
+
+/** Aggiorna listId/listName nelle entry del log di un task spostato. Best-effort. */
+async function updateCompletionLogList(taskId, listId) {
+  try {
+    const snap = await completionsRef().where('taskId', '==', taskId).get();
+    if (snap.empty) return;
+    const list = state.lists.find(l => l.id === listId);
+    const batch = db.batch();
+    snap.docs.forEach(d => batch.update(d.ref, { listId, listName: list ? list.name : '' }));
+    await batch.commit();
+  } catch (e) {
+    console.warn('updateCompletionLogList failed', e);
+  }
 }
 
 /** Remove all completion-log entries for a deleted task, so it stops
@@ -3102,6 +3148,7 @@ function openDetailPanel(taskId) {
   updateDeadlineStatus(task.deadline);
   populatePeriodSelect(task.plannedPeriod); // ordine sempre aggiornato alla data di oggi
   el.detailPeriod.value = task.plannedPeriod || '';
+  populateDetailListSelect(state.activeListId);
 
   if (task.overdue && !task.completed) {
     el.detailOverdueBar.classList.remove('hidden');
@@ -3746,6 +3793,19 @@ function bindEvents() {
     updateDeadlineStatus('');
     updateTask(state.activeTaskId, { deadline: null, overdue: false });
   });
+
+  if (el.detailList) {
+    el.detailList.addEventListener('change', async () => {
+      if (!state.activeTaskId) return;
+      try {
+        await moveTaskToList(state.activeTaskId, el.detailList.value);
+      } catch (e) {
+        console.warn('moveTaskToList failed', e);
+        showToast('Impossibile spostare il task');
+        el.detailList.value = state.activeListId;
+      }
+    });
+  }
 
   el.detailPeriod.addEventListener('change', () => {
     if (!state.activeTaskId) return;
@@ -4702,6 +4762,19 @@ function escapeHtml(str) {
 // ============================================================
 // INIT
 // ============================================================
+
+/** Riempie la tendina "Lista" della scheda task e seleziona la lista indicata */
+function populateDetailListSelect(selectedListId) {
+  if (!el.detailList) return;
+  el.detailList.innerHTML = '';
+  state.lists.forEach(l => {
+    const opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = (l.starred ? '★ ' : '') + l.name;
+    el.detailList.appendChild(opt);
+  });
+  el.detailList.value = selectedListId || '';
+}
 
 function populatePeriodSelect(keepKey) {
   const selects = [el.detailPeriod, el.taskPeriodQuick, el.tlTaskPeriodSel].filter(Boolean);
