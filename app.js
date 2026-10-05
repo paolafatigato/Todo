@@ -1988,8 +1988,20 @@ async function updateTaskInList(listId, taskId, data, taskObj) {
 }
 
 async function deleteTask(taskId) {
+  const task = state.tasks.find(t => t.id === taskId);
   await tasksRef(state.activeListId).doc(taskId).delete();
+  rememberRemovedAgendaTask(state.activeListId, task);
   deleteCompletionLogForTask(taskId);
+}
+
+/** I task creati da AgendaProf (campo agendaLinkId) vengono ricreati da
+ *  AgendaProf se non li trova più nella sua lista: segna sulla lista l'id del
+ *  materiale così AgendaProf sa che è stato eliminato apposta. Best-effort. */
+function rememberRemovedAgendaTask(listId, task) {
+  if (!task || !task.agendaLinkId) return;
+  listsRef().doc(listId).update({
+    deletedAgendaLinks: firebase.firestore.FieldValue.arrayUnion(task.agendaLinkId),
+  }).catch(e => console.warn('rememberRemovedAgendaTask failed', e));
 }
 
 /** Sposta un task in un'altra lista: lo ricrea con lo stesso id nella lista
@@ -2017,6 +2029,7 @@ async function moveTaskToList(taskId, newListId) {
   batch.delete(tasksRef(oldListId).doc(taskId));
   await batch.commit();
 
+  rememberRemovedAgendaTask(oldListId, task);
   updateCompletionLogList(taskId, newListId);
   const newList = state.lists.find(l => l.id === newListId);
   showToast(`Spostato in "${newList ? newList.name : 'lista'}"`);
