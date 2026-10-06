@@ -1304,7 +1304,7 @@ const el = {
   btnMobileMenu:        document.getElementById('btn-mobile-menu'),
   listsNav:             document.getElementById('lists-nav'),
   listsNav:             document.getElementById('lists-nav'),
-  btnNewList:           document.getElementById('btn-new-list'),
+  btnSidebarNewTask:    document.getElementById('btn-sidebar-new-task'),
   btnHome:              document.getElementById('btn-home'),
   btnTimeline:          document.getElementById('btn-timeline'),
   btnCalendar:          document.getElementById('btn-calendar'),
@@ -1351,10 +1351,12 @@ const el = {
   btnLogin:             document.getElementById('btn-login'),
   btnLogout:            document.getElementById('btn-logout'),
   btnOverlayLogin:      document.getElementById('overlay-login'),
-  btnLogoutMobile:      document.getElementById('btn-logout-mobile'),
-  btnLoginMobile:       document.getElementById('btn-login-mobile'),
-  mobileLogoutTrigger:  document.getElementById('mobile-logout-trigger'),
-  mobileLogoutMenu:     document.getElementById('mobile-logout-menu'),
+  account:              document.getElementById('account'),
+  btnAccount:           document.getElementById('btn-account'),
+  accountMenu:          document.getElementById('account-menu'),
+  accountAvatar:        document.getElementById('account-avatar'),
+  accountName:          document.getElementById('account-name'),
+  accountEmail:         document.getElementById('account-email'),
   authOverlay:          document.getElementById('auth-overlay'),
   detailDeadline:       document.getElementById('detail-deadline'),
   detailPeriod:         document.getElementById('detail-period'),
@@ -1476,7 +1478,8 @@ async function loginWithGoogle() {
 }
 
 async function logoutUser() {
-  if (el.mobileLogoutMenu) el.mobileLogoutMenu.classList.add('hidden');
+  closeAccountMenu();
+  document.body.classList.remove('mobile-menu-open');
   try { await firebase.auth().signOut(); }
   catch (err) { console.error(err); }
 }
@@ -1579,6 +1582,62 @@ function renderFrequentList() {
 /** Sceglie la lista di destinazione per "+" e "task frequenti":
  *  quella selezionata nella barra rapida se aperta, altrimenti la lista
  *  preferita (⭐), altrimenti la prima disponibile. */
+/** Crea un task vuoto per "oggi" nella lista indicata e apre subito la scheda completa. */
+async function createTaskWithFullSheet(listId) {
+  if (!listId) { showToast('Crea prima una lista'); return; }
+  const p = getPeriod('oggi');
+  const snap = await tasksRef(listId).get();
+  const docRef = await tasksRef(listId).add({
+    name: '', completed: false, notes: '', order: snap.size,
+    deadline: null,
+    plannedPeriod: 'oggi',
+    plannedPeriodUntil: p ? p.getEnd() : null,
+    overdue: false,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    milestones: [],
+  });
+  openList(listId, docRef.id);
+}
+
+/** "+" della sidebar = sempre "nuovo task".
+ *  Dentro una lista porta al campo di inserimento rapido;
+ *  altrove apre la scheda completa nella lista preferita (o la prima). */
+function handleSidebarNewTask() {
+  const inList = el.listView && !el.listView.classList.contains('hidden') && state.activeListId;
+  if (inList && el.taskInput) {
+    el.taskInput.scrollIntoView({ block: 'nearest' });
+    el.taskInput.focus();
+    return;
+  }
+  createTaskWithFullSheet(pickTimelineTargetList());
+}
+
+function closeAccountMenu() {
+  if (!el.accountMenu) return;
+  el.accountMenu.classList.add('hidden');
+  if (el.btnAccount) el.btnAccount.setAttribute('aria-expanded', 'false');
+}
+
+/** Mostra il chip account (avatar + nome) al posto del vecchio tasto Logout. */
+function renderAccount(user) {
+  if (!el.account) return;
+  closeAccountMenu();
+  if (!user) { el.account.classList.add('hidden'); return; }
+  const name = user.displayName || (user.email ? user.email.split('@')[0] : 'Account');
+  el.accountName.textContent = name;
+  el.accountEmail.textContent = user.email || '';
+  el.accountAvatar.innerHTML = '';
+  if (user.photoURL) {
+    const img = document.createElement('img');
+    img.src = user.photoURL; img.alt = ''; img.referrerPolicy = 'no-referrer';
+    img.onerror = () => { el.accountAvatar.textContent = name.charAt(0).toUpperCase(); };
+    el.accountAvatar.appendChild(img);
+  } else {
+    el.accountAvatar.textContent = name.charAt(0).toUpperCase();
+  }
+  el.account.classList.remove('hidden');
+}
+
 function pickTimelineTargetList() {
   if (el.tlTaskListSel && el.tlTaskListSel.value && el.tlQuickAddBar && !el.tlQuickAddBar.classList.contains('hidden')) {
     return el.tlTaskListSel.value;
@@ -2415,6 +2474,9 @@ function updateStarButton(isStarred) {
 // ============================================================
 
 function renderSidebar() {
+  // Evidenzia la voce di navigazione della vista corrente
+  [[el.btnHome, el.homepage], [el.btnTimeline, el.timelineView], [el.btnCalendar, el.calendarView]]
+    .forEach(([btn, view]) => btn && view && btn.classList.toggle('active', !view.classList.contains('hidden')));
   // On mobile the search is in homepage; on desktop it's in the sidebar
   const query = (el.sidebarSearch?.value || el.homeSearch?.value || '').trim().toLowerCase();
   el.listsNav.innerHTML = '';
@@ -2471,6 +2533,7 @@ function renderHomepage() {
         <div class="empty-state-icon">📋</div>
         <div class="empty-state-text">Nessuna lista.<br>Creane una per iniziare!</div>
       </div>`;
+    el.homeCards.appendChild(buildNewListTile());
     return;
   }
 
@@ -2512,6 +2575,25 @@ function renderHomepage() {
       if (container) container.innerHTML = '';
     });
   });
+
+  if (!query) el.homeCards.appendChild(buildNewListTile());
+}
+
+/** Scheda tratteggiata in fondo a "Tutte le liste" per creare una nuova lista. */
+function buildNewListTile() {
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'home-new-list-tile';
+  tile.innerHTML = `
+    <span class="home-new-list-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="15" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
+    </span>
+    <span class="home-new-list-text">
+      <span class="home-new-list-title">Crea una nuova lista</span>
+      <span class="home-new-list-sub">Lavoro, casa, spesa, progetti…</span>
+    </span>`;
+  tile.addEventListener('click', showModal);
+  return tile;
 }
 
 /**
@@ -3502,7 +3584,7 @@ async function persistListOrder() {
 
 function bindEvents() {
 
-  el.btnNewList.addEventListener('click', showModal);
+  if (el.btnSidebarNewTask) el.btnSidebarNewTask.addEventListener('click', handleSidebarNewTask);
   el.btnNewListHome.addEventListener('click', showModal);
   el.btnHome.addEventListener('click', showHomepage);
   el.btnTimeline.addEventListener('click', showTimeline);
@@ -3515,14 +3597,14 @@ function bindEvents() {
     });
   }
   // Chiude il dropdown quando si sceglie una voce di navigazione
-  if (el.btnNewList) {
-    el.btnNewList.addEventListener('click', () => document.body.classList.remove('mobile-menu-open'));
+  if (el.btnSidebarNewTask) {
+    el.btnSidebarNewTask.addEventListener('click', () => document.body.classList.remove('mobile-menu-open'));
   }
   const sidebarFooterEl = document.getElementById('sidebar-footer');
   if (sidebarFooterEl) {
     sidebarFooterEl.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
-      if (btn && btn.id !== 'mobile-logout-trigger') {
+      if (btn && btn.id !== 'btn-account') {
         document.body.classList.remove('mobile-menu-open');
       }
     });
@@ -3988,22 +4070,7 @@ function bindEvents() {
 
   // ── Timeline "+" — nuovo task, apre subito la scheda completa ──
   if (el.btnTimelineNewTask) {
-    el.btnTimelineNewTask.addEventListener('click', async () => {
-      const listId = pickTimelineTargetList();
-      if (!listId) { showToast('Crea prima una lista'); return; }
-      const p = getPeriod('oggi');
-      const snap = await tasksRef(listId).get();
-      const docRef = await tasksRef(listId).add({
-        name: '', completed: false, notes: '', order: snap.size,
-        deadline: null,
-        plannedPeriod: 'oggi',
-        plannedPeriodUntil: p ? p.getEnd() : null,
-        overdue: false,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        milestones: [],
-      });
-      openList(listId, docRef.id);
-    });
+    el.btnTimelineNewTask.addEventListener('click', () => createTaskWithFullSheet(pickTimelineTargetList()));
   }
 
   // ── Timeline "🔁" — task frequenti (dropdown) ──────────────────
@@ -4088,35 +4155,22 @@ function bindEvents() {
 
   if (el.btnLogin)        el.btnLogin.addEventListener('click', loginWithGoogle);
   if (el.btnLogout)       el.btnLogout.addEventListener('click', logoutUser);
-  if (el.btnLogoutMobile) el.btnLogoutMobile.addEventListener('click', logoutUser);
-  if (el.btnLoginMobile)  el.btnLoginMobile.addEventListener('click', loginWithGoogle);
   if (el.btnOverlayLogin) el.btnOverlayLogin.addEventListener('click', loginWithGoogle);
 
-  // ── Mobile logout trigger (show/hide menu) ───────────────────
-  if (el.mobileLogoutTrigger) {
-    el.mobileLogoutTrigger.addEventListener('click', (e) => {
+  // ── Account chip: il logout vive in un piccolo menu, non sempre in vista ──
+  if (el.btnAccount && el.accountMenu) {
+    el.btnAccount.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (el.mobileLogoutMenu.classList.contains('hidden')) {
-        // Show and position menu below the trigger
-        const triggerRect = el.mobileLogoutTrigger.getBoundingClientRect();
-        el.mobileLogoutMenu.classList.remove('hidden');
-        // Position below the trigger, aligned to trigger's right edge
-        el.mobileLogoutMenu.style.top = (triggerRect.bottom + 8) + 'px';
-        el.mobileLogoutMenu.style.left = Math.max(10, triggerRect.right - 120) + 'px';
-      } else {
-        el.mobileLogoutMenu.classList.add('hidden');
-      }
+      const willOpen = el.accountMenu.classList.contains('hidden');
+      el.accountMenu.classList.toggle('hidden', !willOpen);
+      el.btnAccount.setAttribute('aria-expanded', String(willOpen));
     });
+    document.addEventListener('click', (e) => {
+      if (!el.accountMenu.classList.contains('hidden') &&
+          !el.account.contains(e.target)) closeAccountMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAccountMenu(); });
   }
-
-  // Close mobile logout menu when clicking outside
-  document.addEventListener('click', (e) => {
-    if (el.mobileLogoutMenu && !el.mobileLogoutMenu.classList.contains('hidden')) {
-      if (!el.mobileLogoutTrigger.contains(e.target) && !el.mobileLogoutMenu.contains(e.target)) {
-        el.mobileLogoutMenu.classList.add('hidden');
-      }
-    }
-  });
 
   // ── Custom periods modal ─────────────────────────────────────
   const btnManagePeriods = document.getElementById('btn-manage-periods');
@@ -4868,9 +4922,7 @@ function init() {
       if (user) {
         currentUserUid = user.uid;
         if (el.btnLogin)    el.btnLogin.classList.add('hidden');
-        if (el.btnLogout)   el.btnLogout.classList.remove('hidden');
-        if (el.btnLogoutMobile) el.btnLogoutMobile.classList.remove('hidden');
-        if (el.btnLoginMobile)  el.btnLoginMobile.classList.add('hidden');
+        renderAccount(user);
         if (el.authOverlay) el.authOverlay.classList.add('hidden');
         try {
           listenLists();
@@ -4887,9 +4939,7 @@ function init() {
         state.lists = []; state.tasks = [];
         renderSidebar(); showHomepage();
         if (el.btnLogin)    el.btnLogin.classList.remove('hidden');
-        if (el.btnLogout)   el.btnLogout.classList.add('hidden');
-        if (el.btnLogoutMobile) el.btnLogoutMobile.classList.add('hidden');
-        if (el.btnLoginMobile)  el.btnLoginMobile.classList.remove('hidden');
+        renderAccount(null);
         if (el.authOverlay) el.authOverlay.classList.remove('hidden');
       }
     });

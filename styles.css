@@ -1090,25 +1090,6 @@ body {
     font-size: 0.85rem;
   }
 
-  /* Auth controls on tablet — inline row */
-  .auth-controls {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
-    display: flex;
-    flex-direction: row;
-    gap: 4px;
-    flex-wrap: wrap;
-    width: 100%;
-  }
-
-  #btn-login,
-  #btn-logout {
-    flex: 1;
-    min-width: 0;
-    padding: 6px 8px;
-    font-size: 0.7rem;
-  }
 
   /* Task list adjustments */
   #list-title-row {
@@ -1294,7 +1275,6 @@ body {
     border-radius: 5px;
   }
 
-  .auth-controls { display: none !important; }
 
   /* Hide list nav on mobile */
   #lists-nav { display: none; }
@@ -1364,9 +1344,6 @@ body {
   #detail-panel.open { transform: translateY(0); }
 }
 
-:root {
-  --detail-w: 100%;
-}
 
 /* ============================================================
    MOBILE MENU TRIGGER — cerchio giallo che sostituisce l'indice
@@ -2548,162 +2525,6 @@ body {
 }
 #btn-calendar:hover { background: rgba(255,255,255,0.10); color: #fff; }
 
-/* Auth controls block — sits at the very bottom of sidebar footer */
-.auth-controls {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.12); /* default desktop */
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* Login button — ghost on dark bg */
-#btn-login {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.10);
-  color: rgba(255,255,255,0.85);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-align: center;
-  border: 1px solid rgba(255,255,255,0.20);
-  transition: background var(--t), color var(--t), border-color var(--t);
-}
-#btn-login:hover {
-  background: rgba(255,240,136,0.18);
-  color: var(--yellow);
-  border-color: rgba(255,240,136,0.4);
-}
-
-/* Logout button — subtle pink/red on dark bg */
-#btn-logout {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: rgba(255,152,169,0.12);
-  color: #FF98A9;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-align: center;
-  border: 1px solid rgba(255,152,169,0.28);
-  transition: background var(--t), color var(--t), border-color var(--t);
-}
-#btn-logout:hover {
-  background: rgba(192,61,85,0.25);
-  color: #fff;
-  border-color: rgba(192,61,85,0.5);
-}
-
-/* Mobile logout trigger (small blue x on sidebar footer) and menu */
-#mobile-logout-trigger {
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  border-radius: 50%;
-  transition: background var(--t), transform var(--t);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.9rem;
-  color: var(--light-blue);
-  font-weight: 600;
-}
-
-#mobile-logout-trigger::after {
-  content: '✕';
-}
-
-#mobile-logout-trigger:hover {
-  background: var(--blue);
-  transform: scale(1.15);
-}
-
-#mobile-logout-menu {
-  position: fixed;
-  bottom: auto;
-  right: auto;
-  top: 0;
-  left: 0;
-  width: 140px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow);
-  padding: 8px 0;
-  z-index: 100;
-  margin-bottom: 0;
-}
-
-#btn-logout-mobile {
-  display: block;
-  width: 100%;
-  padding: 10px 16px;
-  text-align: left;
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: background var(--t);
-}
-
-#btn-logout-mobile:hover {
-  background: var(--bg);
-  color: var(--danger);
-}
-
-/* Mobile: hide top logout and show mobile logout trigger on small screens */
-@media (max-width: 800px) {
-  #btn-logout { display: none !important; }
-  
-  #sidebar-footer {
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 0;
-    padding: 8px 10px;
-  }
-  
-
-  
-  #sidebar-buttons button {
-    padding: 8px 10px;
-    font-size: 0.8rem;
-  }
-  #sidebar-buttons {
-  padding: 10px 10px 12px;
-  border-top: 1px solid rgba(255,255,255,0.12);
-  border-bottom: 1px solid rgba(255,255,255,0.12);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-  
-  #mobile-logout-trigger {
-    display: flex !important;
-    width: 28px;
-    height: 28px;
-    cursor: pointer;
-    border-radius: 50%;
-    transition: background var(--t), transform var(--t);
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.9rem;
-    color: var(--c3);
-    margin-left: 6px;
-  }
-  
-  #mobile-logout-trigger:hover {
-    background: var(--blue);
-    transform: scale(1.15);
-  }
-  
-  .auth-controls { display: none !important; }
-}
-
 
 /* ============================================================
    CALENDAR VIEW — layout
@@ -3086,102 +2907,6 @@ body {
   .cal-habit-badge { font-size: 0.52rem; padding: 1px 4px; bottom: 3px; right: 3px; }
 }
 
-/* ----------------------------------------------------------
-   MOBILE FOOTER — shown only on small screens
-   ---------------------------------------------------------- */
-#mobile-footer { display: none; }
-
-#mobile-footer .mobile-footer-inner {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 8px 16px;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-#btn-logout-mobile {
-  padding: 8px 12px;
-  background: transparent;
-  border-radius: 8px;
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-}
-
-@media (max-width: 800px) {
-  /* Show mobile footer and give main content room */
-  #mobile-footer {
-    display: block;
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: var(--bg);
-    border-top: 1px solid var(--border);
-    z-index: 60;
-  }
-
-  #main { padding-bottom: 64px; }
-
-  /* Ensure the mobile logout button is aligned to the right */
-  #mobile-footer .mobile-footer-inner { justify-content: flex-end; }
-
-  /* Make footer logout visually identical to desktop logout */
-  #btn-logout-mobile {
-    width: 100%;
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    background: rgba(255,152,169,0.12);
-    color: #FF98A9;
-    font-size: 0.82rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-align: center;
-    border: 1px solid rgba(255,152,169,0.28);
-  }
-
-  #btn-logout-mobile:hover {
-    background: rgba(192,61,85,0.25);
-    color: #fff;
-    border-color: rgba(192,61,85,0.5);
-  }
-}
-
-/* Hide the auth-controls row on mobile — login moved to footer */
-@media (max-width: 800px) {
-  .auth-controls { display: none !important; }
-}
-
-/* Style for mobile login button to keep same graphics as sidebar login */
-#btn-login-mobile {
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.10);
-  color: rgba(255,255,255,0.85);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  border: 1px solid rgba(255,255,255,0.20);
-}
-
-#btn-login-mobile:hover {
-  background: rgba(255,240,136,0.18);
-  color: var(--yellow);
-  border-color: rgba(255,240,136,0.4);
-}
-
-/* Make sure mobile login looks reasonable on light footer: adapt colors when footer is light */
-@media (max-width: 800px) {
-  #btn-login-mobile {
-    background: var(--bg);
-    color: var(--text-primary);
-    border: 1px solid var(--border);
-  }
-  #btn-login-mobile:hover {
-    background: var(--border);
-    color: var(--text-primary);
-  }
-}
 /* ============================================================
    DAILY RECURRING PERIOD — gradient pill
    Gradient: #FFF088 → #FF0022 → #B285EC
@@ -4843,3 +4568,660 @@ body {
   pointer-events: auto;
 }.cpm-yearly-option { margin-top: 8px; }
 .cpm-yearly-option input[type="checkbox"] { accent-color: var(--blue); width: 15px; height: 15px; cursor: pointer; }
+
+/* ============================================================
+   DESIGN REFRESH — spaziature, gerarchia, tasti più chiari
+   Questo blocco sta in fondo apposta: sovrascrive le regole
+   precedenti senza doverle riscrivere una per una.
+   Regola d'oro: il "+" significa SEMPRE "nuovo task".
+   La nuova lista si crea da "Tutte le liste".
+   ============================================================ */
+
+:root {
+  --detail-w: 460px;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a83b8' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+}
+
+/* ---------- Focus visibile da tastiera (accessibilità) ---------- */
+button:focus-visible,
+select:focus-visible,
+.home-card-top:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+#sidebar button:focus-visible { outline-color: var(--yellow); }
+
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+#sidebar-header {
+  padding: 22px 16px 16px 22px;
+}
+
+.logo { font-size: 1.15rem; }
+
+/* "+" giallo = nuovo task (non più "nuova lista") */
+#btn-sidebar-new-task {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--blue);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  transition: transform var(--t), background var(--t);
+}
+#btn-sidebar-new-task:hover { transform: rotate(90deg) scale(1.08); background: #fff6b0; }
+
+#sidebar-buttons {
+  padding: 0 12px 12px;
+  gap: 2px;
+}
+
+#sidebar-task-search-wrap { margin-bottom: 10px; }
+
+#sidebar-task-search {
+  padding: 10px 14px 10px 36px;
+  border-radius: 12px;
+}
+#sidebar-task-search-wrap::before { left: 14px; }
+
+#btn-home,
+#btn-timeline,
+#btn-calendar,
+#btn-manage-periods {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  margin-top: 0;
+  border-top: none;
+}
+
+#btn-home.active,
+#btn-timeline.active,
+#btn-calendar.active {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-weight: 600;
+}
+
+#btn-manage-periods { padding-top: 9px; }
+
+#lists-nav-label {
+  margin: 4px 12px 0;
+  padding: 14px 12px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#lists-nav {
+  padding: 0 12px 12px;
+  gap: 2px;
+}
+
+.nav-item {
+  padding: 9px 10px;
+  border-radius: 10px;
+}
+
+/* ---------- Footer sidebar: login / account ---------- */
+#sidebar-footer {
+  padding: 10px 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  position: relative;
+}
+
+#btn-login {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--yellow);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 0.88rem;
+  transition: background var(--t), transform var(--t);
+}
+#btn-login:hover { background: #fff6b0; transform: translateY(-1px); }
+
+#account { position: relative; }
+
+/* Chip account: discreto, il logout compare solo nel menu */
+#btn-account {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: #fff;
+  text-align: left;
+  transition: background var(--t);
+}
+#btn-account:hover,
+#btn-account[aria-expanded="true"] { background: rgba(255, 255, 255, 0.10); }
+
+#account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--blue);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+#account-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.account-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+#account-name,
+#account-email {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#account-name  { font-size: 0.86rem; font-weight: 600; }
+#account-email { font-size: 0.72rem; color: rgba(255, 255, 255, 0.55); }
+#account-email:empty { display: none; }
+
+.account-more {
+  font-size: 1.1rem;
+  line-height: 1;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+#account-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  background: var(--surface);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: 200;
+  animation: popIn 160ms var(--ease-out) both;
+}
+
+#btn-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--dark-red);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background var(--t);
+}
+#btn-logout:hover { background: #fff0f2; }
+
+/* ============================================================
+   HOMEPAGE — "Tutte le liste"
+   ============================================================ */
+#homepage {
+  padding: 48px 48px 96px;
+  max-width: 920px;
+}
+
+#home-header {
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* Bottone secondario: niente "+", così non si confonde con "nuovo task" */
+#btn-new-list-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--surface);
+  color: var(--blue);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(53, 72, 192, 0.08);
+  transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+}
+#btn-new-list-home:hover {
+  border-color: var(--blue);
+  box-shadow: 0 6px 18px rgba(53, 72, 192, 0.16);
+  transform: translateY(-1px);
+}
+
+#home-cards { gap: 14px; }
+
+/* Scheda tratteggiata in fondo all'elenco */
+.home-new-list-tile {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  border: 2px dashed #c9d2f3;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--blue);
+  text-align: left;
+  transition: border-color var(--t), background var(--t);
+  animation: slideIn 250ms ease both;
+}
+.home-new-list-tile:hover {
+  border-color: var(--blue);
+  background: rgba(53, 72, 192, 0.04);
+}
+
+.home-new-list-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(53, 72, 192, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.home-new-list-text { display: flex; flex-direction: column; gap: 2px; }
+.home-new-list-title { font-family: var(--font-display); font-weight: 700; font-size: 1rem; }
+.home-new-list-sub   { font-size: 0.82rem; color: var(--text-muted); }
+
+/* ============================================================
+   SELECT — stile unico al posto di quello nativo del browser
+   ============================================================ */
+#list-sort-select,
+#task-period-quick,
+#detail-list,
+#detail-period,
+#detail-recurrence-type,
+#detail-custom-subtype,
+#tl-task-list-sel,
+#tl-task-period-sel {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: var(--surface);
+  background-image: var(--chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* ============================================================
+   LISTA — header, inserimento rapido, task
+   ============================================================ */
+#list-header { padding: 28px 40px 0; }
+
+#list-title-row {
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+#list-title-input { min-width: 0; }
+
+#list-sort-select {
+  height: 38px;
+  padding-left: 12px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+  margin-right: 4px;
+}
+
+/* Icone dell'header: area di tocco ampia e uniforme */
+#btn-star,
+#btn-list-settings,
+#btn-delete-list {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: background var(--t), color var(--t);
+}
+#btn-star:hover { transform: none; }
+#btn-star:hover,
+#btn-list-settings:hover,
+#btn-delete-list:hover { background: var(--bg); }
+
+/* Riga 1: campo + bottone "+" affiancati. Riga 2: periodo, data, ricorrenza */
+#add-task-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 20px;
+}
+
+#task-input {
+  order: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+
+#btn-add-task {
+  order: 2;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 1.6rem;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(53, 72, 192, 0.25);
+}
+
+#add-task-meta {
+  order: 3;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#task-period-quick {
+  flex: 0 1 220px;
+  height: 34px;
+  padding-left: 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+#task-deadline-quick {
+  height: 34px;
+  width: 150px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.btn-clear-dl-quick,
+.btn-quick-recurrence {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#task-list {
+  padding: 20px 40px 96px;
+  gap: 10px;
+}
+
+.task-item {
+  padding: 14px 18px;
+  gap: 14px;
+  border-radius: 14px;
+}
+
+.task-check {
+  width: 22px;
+  height: 22px;
+}
+
+/* Su touch non esiste l'hover: mostra sempre il tasto "rimanda" */
+@media (hover: none) {
+  .task-postpone-btn,
+  .tl-postpone-btn { opacity: 1; }
+}
+
+/* ============================================================
+   AGENDA
+   ============================================================ */
+#timeline-header { padding: 28px 40px 20px; }
+#timeline-content { padding-left: 40px; padding-right: 40px; }
+
+/* ============================================================
+   SCHEDA TASK (detail panel)
+   Su desktop è un pannello laterale, non più a tutto schermo.
+   ============================================================ */
+#detail-panel {
+  width: min(var(--detail-w), 100vw);
+}
+
+#detail-inner {
+  padding: 24px 28px 0;
+  gap: 18px;
+}
+
+#btn-close-detail {
+  width: 36px;
+  height: 36px;
+  font-size: 0.9rem;
+}
+
+#detail-task-title {
+  width: calc(100% + 20px);
+  margin: 0 -10px;
+  padding: 8px 10px;
+  border: 1.5px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  outline: none;
+  font-size: 1.45rem;
+  transition: background var(--t), border-color var(--t);
+}
+#detail-task-title:hover { background: var(--bg); }
+#detail-task-title:focus { background: #fff; border-color: var(--blue); }
+
+#detail-list {
+  width: 100%;
+  padding-top: 9px;
+  padding-bottom: 9px;
+  padding-left: 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color var(--t);
+}
+#detail-list:focus { border-color: var(--blue); }
+
+/* Azioni sempre raggiungibili in fondo al pannello */
+#detail-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: auto -28px 0;
+  padding: 20px 28px 20px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0) 0, var(--surface) 16px);
+}
+
+#btn-save-detail,
+#btn-complete-task { padding: 12px; border-radius: 12px; }
+
+/* Elimina: azione secondaria, meno aggressiva */
+#btn-delete-task.danger {
+  grid-column: 1 / -1;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  font-size: 0.85rem;
+  border-radius: 10px;
+}
+#btn-delete-task.danger:hover { background: #fff0f2; color: var(--danger); }
+
+/* ============================================================
+   TABLET (701–1199px)
+   ============================================================ */
+@media (min-width: 701px) and (max-width: 1199px) {
+  :root { --sidebar-w: 220px; }
+
+  #sidebar-header { padding: 18px 12px 14px 16px; }
+  #sidebar-buttons,
+  #lists-nav { padding-left: 8px; padding-right: 8px; }
+  #lists-nav-label { margin-left: 8px; margin-right: 8px; }
+  #sidebar-footer { padding: 8px 8px 12px; }
+
+  #homepage { padding: 32px 28px 80px; }
+  #home-header { flex-direction: row; align-items: center; }
+
+  #list-header { padding: 22px 28px 0; }
+  #task-list { padding: 16px 28px 80px; }
+  #timeline-header { padding: 22px 28px 16px; }
+  #timeline-content { padding-left: 28px; padding-right: 28px; }
+}
+
+/* ============================================================
+   MOBILE (≤700px)
+   ============================================================ */
+@media (max-width: 700px) {
+  :root { --detail-w: 100%; }
+
+  /* Il menu (cerchio giallo) sta in alto a destra:
+     lasciamo spazio a fianco dei titoli così non si sovrappone */
+  .mobile-menu-fab {
+    top: 14px;
+    right: 14px;
+    width: 44px;
+    height: 44px;
+    font-size: 1.15rem;
+  }
+
+  #homepage { padding: 20px 16px 48px; }
+
+  #home-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  #home-header h1 {
+    font-size: 1.75rem;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding-right: 56px;
+  }
+  #btn-new-list-home { padding: 9px 14px; font-size: 0.88rem; }
+
+  #home-search-wrap { padding-bottom: 16px; }
+  #home-cards { gap: 12px; }
+  .home-new-list-tile { padding: 16px 18px; }
+
+  /* Header lista */
+  #list-header { padding: 16px 16px 0; }
+  #list-title-row { gap: 4px; margin-bottom: 14px; }
+  #list-title-input {
+    flex: 0 0 100%;
+    padding-right: 56px;
+    min-height: 44px;
+    font-size: 1.45rem;
+    margin-bottom: 4px;
+  }
+  #list-sort-select { flex: 1; min-width: 0; height: 40px; }
+  #btn-star,
+  #btn-list-settings,
+  #btn-delete-list { width: 40px; height: 40px; }
+
+  #add-task-row { gap: 8px; padding-bottom: 14px; }
+  #task-input { height: 46px; font-size: 16px; } /* 16px evita lo zoom automatico su iOS */
+  #btn-add-task { width: 46px; height: 46px; }
+  #add-task-meta { flex-wrap: nowrap; gap: 6px; min-width: 0; }
+  #task-period-quick { flex: 1 1 0; min-width: 0; height: 38px; font-size: 0.85rem; }
+  #task-deadline-quick { flex: 0 0 auto; width: auto; height: 38px; font-size: 0.85rem; }
+  .btn-clear-dl-quick,
+  .btn-quick-recurrence { width: 38px; height: 38px; flex-shrink: 0; }
+  .btn-clear-dl-quick { width: 28px; }
+
+  #task-list { padding: 14px 16px 48px; gap: 8px; }
+  .task-item { padding: 12px 14px; gap: 12px; }
+  .task-item:hover { transform: none; }
+
+  /* Agenda / calendario: spazio per il cerchio del menu */
+  #timeline-header { padding: 16px 16px 14px; gap: 12px; }
+  #timeline-header h1 { min-height: 44px; display: flex; align-items: center; padding-right: 56px; }
+  #timeline-content { padding: 12px 16px 48px; }
+  #calendar-header { padding-right: 72px; }
+  #cal-nav { gap: 6px; min-width: 0; }
+  #cal-month-label { font-size: 0.95rem; min-width: 0; white-space: nowrap; }
+
+  /* Scheda task: bottom sheet alto, con maniglia */
+  #detail-panel {
+    height: 92vh;
+    height: 92dvh;
+    border-radius: 20px 20px 0 0;
+  }
+  #detail-panel::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--border);
+    margin: 10px auto 0;
+  }
+  #detail-inner { padding: 8px 18px 0; gap: 16px; }
+  #detail-actions { margin: auto -18px 0; padding: 16px 18px calc(16px + env(safe-area-inset-bottom)); }
+  #detail-task-title { font-size: 1.3rem; }
+
+  /* Menu a tendina (sidebar mobile) */
+  body.mobile-menu-open #sidebar {
+    top: 66px;
+    width: min(280px, calc(100vw - 28px));
+    max-height: calc(100vh - 82px);
+  }
+  body.mobile-menu-open #sidebar-header { padding: 14px 14px 12px 16px; }
+  body.mobile-menu-open #sidebar-buttons { padding: 12px 12px 10px; }
+  body.mobile-menu-open #btn-home,
+  body.mobile-menu-open #btn-timeline,
+  body.mobile-menu-open #btn-calendar,
+  body.mobile-menu-open #btn-manage-periods {
+    padding: 11px 12px;
+    font-size: 0.92rem;
+  }
+  body.mobile-menu-open #sidebar-footer {
+    padding: 8px 10px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  #lists-nav-label { display: none; }
+}

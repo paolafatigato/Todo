@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.png" type="image/png">
   <link rel="apple-touch-icon" href="icon.png">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#3548C0">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet" />
@@ -24,7 +24,7 @@
   <div id="sidebar-header">
     <span class="logo">✦ Todo</span>
     <div id="sidebar-new-btn-wrap">
-      <button id="btn-new-list" title="Nuova lista">+</button>
+      <button id="btn-sidebar-new-task" title="Nuovo task" aria-label="Nuovo task">+</button>
     </div>
   </div>
   <div id="sidebar-buttons">
@@ -36,15 +36,25 @@
     <button id="btn-calendar" title="Calendario">◫ Calendario</button>
     <button id="btn-manage-periods" title="Gestisci periodi personalizzati">◈ Periodi</button>
   </div>
+  <div id="lists-nav-label">Le tue liste</div>
   <ul id="lists-nav" role="list"></ul>
   <div id="sidebar-footer">
-    <div id="mobile-logout-trigger" class="hidden" title="Menu logout"></div>
-    <div class="auth-controls">
-      <button id="btn-login" title="Accedi con Google">Login</button>
-      <button id="btn-logout" class="hidden" title="Esci">Logout</button>
-    </div>
-    <div id="mobile-logout-menu" class="hidden">
-      <button id="btn-logout-mobile" title="Esci">Logout</button>
+    <button id="btn-login" title="Accedi con Google">Accedi</button>
+    <div id="account" class="hidden">
+      <button id="btn-account" type="button" aria-haspopup="menu" aria-expanded="false" title="Account">
+        <span id="account-avatar" aria-hidden="true"></span>
+        <span class="account-text">
+          <span id="account-name"></span>
+          <span id="account-email"></span>
+        </span>
+        <span class="account-more" aria-hidden="true">⋯</span>
+      </button>
+      <div id="account-menu" class="hidden" role="menu">
+        <button id="btn-logout" type="button" role="menuitem">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Esci dall'account
+        </button>
+      </div>
     </div>
   </div>
 </aside>
@@ -58,7 +68,10 @@
     <section id="homepage" class="hidden">
       <header id="home-header">
         <h1>Le mie liste</h1>
-        <button id="btn-new-list-home">+ Nuova lista</button>
+        <button id="btn-new-list-home" title="Crea una nuova lista">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="15" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
+          Nuova lista
+        </button>
       </header>
       <div id="home-search-wrap">
         <input id="home-search" type="text" placeholder="Cerca lista…" autocomplete="off" />
@@ -88,7 +101,7 @@
             <button id="btn-clear-deadline-quick" class="btn-clear-dl-quick" title="Rimuovi scadenza">✕</button>
             <button id="btn-quick-recurrence" class="btn-quick-recurrence" title="Imposta ricorrenza">↻</button>
           </div>
-          <button id="btn-add-task">+</button>
+          <button id="btn-add-task" title="Aggiungi task" aria-label="Aggiungi task">+</button>
           <!-- Quick-recurrence popover — anchored to this row -->
           <div id="quick-recurrence-popover" class="hidden">
             <div class="qrp-types">
@@ -668,12 +681,6 @@
     </div>
   </div>
 
-  <!-- MOBILE FOOTER (login on small screens) -->
-  <footer id="mobile-footer">
-    <div class="mobile-footer-inner">
-      <button id="btn-login-mobile" class="hidden" title="Accedi">Accedi</button>
-    </div>
-  </footer>
 
 </body>
 </html>
